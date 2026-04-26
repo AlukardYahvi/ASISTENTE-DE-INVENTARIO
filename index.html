@@ -11,10 +11,16 @@
   <!-- Carga de Babel para que el navegador entienda el código React (JSX) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+  <!-- Lector de Códigos de Barras y QR usando la cámara del dispositivo -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
   <!-- Estilos de animación -->
   <style>
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    /* Ajustes para el escáner de cámara */
+    #qr-reader { width: 100%; border-radius: 0.5rem; overflow: hidden; border: 2px solid #bfdbfe; }
+    #qr-reader__dashboard_section_csr span { color: #1e3a8a !important; font-weight: bold; }
   </style>
 </head>
 <body class="bg-slate-50 text-gray-900 font-sans">
@@ -36,12 +42,11 @@
     // Íconos
     import * as LucideIcons from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
 
-    // Extrayendo los íconos necesarios
     const { 
       LayoutDashboard, Boxes, ScanLine, AlertTriangle, Search, Plus, Minus,
       Camera, Keyboard, CheckCircle2, PackageSearch, MapPin, History,
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
-      Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert
+      Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X
     } = LucideIcons;
 
     // =====================================================================
@@ -57,10 +62,7 @@
       measurementId: "G-MTYN0VSK14"
     };
 
-    // Esta línea permite que funcione tanto aquí en la vista previa como en tu GitHub
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : MIS_CREDENCIALES_FIREBASE;
-    
-    // Inicialización de Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
@@ -76,18 +78,15 @@
       { id: 'consumibles', name: 'Consumibles Generales', icon: '📦', color: 'bg-amber-100 text-amber-700' }
     ];
 
-    // Tu correo como Gestor Principal
     const SUPER_ADMIN_EMAIL = 'yahvi.edsel.hernandez@gmail.com';
 
     function LabInventoryApp() {
-      // Estados de Autenticación y Usuarios
       const [firebaseUser, setFirebaseUser] = useState(null);
       const [currentUserData, setCurrentUserData] = useState(null);
       const [allUsers, setAllUsers] = useState([]);
       const [authErrorDomain, setAuthErrorDomain] = useState(false);
       const [mockEmail, setMockEmail] = useState(SUPER_ADMIN_EMAIL);
       
-      // Estados de la App
       const [activeTab, setActiveTab] = useState('dashboard');
       const [inventory, setInventory] = useState([]);
       const [searchQuery, setSearchQuery] = useState('');
@@ -102,7 +101,10 @@
       const [scannedItem, setScannedItem] = useState(null);
       const [scanAction, setScanAction] = useState('info');
       const [scanAmount, setScanAmount] = useState(1);
+      const [cameraActive, setCameraActive] = useState(false);
+      
       const scannerInputRef = useRef(null);
+      const hiddenSubmitBtnRef = useRef(null);
 
       // --- INICIALIZACIÓN ---
       useEffect(() => {
@@ -110,9 +112,6 @@
           try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
               await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-              // Si falla el token (fuera del canvas), no forzamos anónimo de inmediato.
-              // Dejamos que el usuario inicie con Google.
             }
           } catch (err) { console.error(err); }
         };
@@ -165,19 +164,82 @@
         return () => { unsubInv(); unsubUsers(); };
       }, [firebaseUser]);
 
+      // --- EFECTO DE LA CÁMARA (LIBRERÍA HTML5-QRCODE) ---
+      useEffect(() => {
+        let html5QrcodeScanner;
+        if (cameraActive && activeTab === 'scanner') {
+          // Inicializa el escáner visual en el div con id "qr-reader"
+          html5QrcodeScanner = new Html5QrcodeScanner(
+            "qr-reader",
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            false
+          );
+          
+          html5QrcodeScanner.render((decodedText) => {
+            // Cuando detecta un código con éxito:
+            setScanInput(decodedText);
+            setCameraActive(false); // Apaga la cámara
+            html5QrcodeScanner.clear();
+            
+            // Simula presionar "Enter" para buscar en la base de datos
+            setTimeout(() => {
+              if (hiddenSubmitBtnRef.current) hiddenSubmitBtnRef.current.click();
+            }, 150);
+
+          }, (error) => {
+            // Ignorar errores de "no se encontró código en este frame"
+          });
+        }
+
+        return () => {
+          if (html5QrcodeScanner) {
+            html5QrcodeScanner.clear().catch(e => console.error("Error limpiando escáner", e));
+          }
+        };
+      }, [cameraActive, activeTab]);
+
+
+      // --- FUNCIONES RESTAURADAS: ALERTAS Y CORREOS ---
+      const getExpiringSoonItems = () => {
+        const today = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(today.getDate() + 30);
+        return inventory.filter(item => {
+          if (!item.expirationDate) return false;
+          const expDate = new Date(item.expirationDate);
+          return expDate <= thirtyDaysFromNow && expDate >= today;
+        }).sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
+      };
+
+      const handleSendPurchaseRequest = (item) => {
+        const emailTo = "compras.directivo@laboratorio.com"; // Puedes cambiar este correo por defecto
+        const subject = encodeURIComponent(`URGENTE: Requisición de Stock - ${item.name}`);
+        const body = encodeURIComponent(
+          `Hola,\n\nSe solicita la compra urgente del siguiente material, ya que el stock se encuentra en niveles críticos o agotado en el laboratorio.\n\n` +
+          `DETALLES DEL PRODUCTO:\n` +
+          `- Nombre: ${item.name}\n` +
+          `- Categoría: ${item.category}\n` +
+          `- Marca Requerida: ${item.brand || 'N/A'}\n` +
+          `- Proveedor Habitual: ${item.provider || 'N/A'}\n` +
+          `- Stock Actual: ${item.qty} ${item.unit} (Mínimo requerido: ${item.minThreshold} ${item.unit})\n\n` +
+          `Por favor, iniciar el proceso de cotización y compra.\n\n` +
+          `Atentamente,\n${currentUserData.name}\nGestión Automática - LabManager`
+        );
+        window.location.href = `mailto:${emailTo}?subject=${subject}&body=${body}`;
+      };
+
+
+      // --- FUNCIONES DE LOGIN ---
       const handleGoogleLogin = async () => {
-        // Prevención de error en Vista Previa
         if (window.location.hostname.includes('usercontent.goog') || window.location.hostname.includes('csb.app')) {
           setAuthErrorDomain(true);
           return;
         }
-
         const provider = new GoogleAuthProvider();
         try {
           setLoading(true);
           await signInWithPopup(auth, provider);
         } catch (error) {
-          console.error(error);
           setAuthErrorDomain(true);
           setLoading(false);
         }
@@ -210,8 +272,24 @@
       };
 
       const generateUniqueQR = () => {
-        const code = 'LAB-' + Math.random().toString(36).substr(2, 6).toUpperCase();
-        setGeneratedQR(code); return code;
+        let code = '';
+        let isUnique = false;
+        
+        while (!isUnique) {
+          // Mezcla de Tiempo Exacto (milisegundos) + Aleatorio para asegurar unicidad matemática
+          const timePart = Date.now().toString(36).toUpperCase();
+          const randPart = Math.random().toString(36).substr(2, 4).toUpperCase();
+          code = `LAB-${timePart}-${randPart}`;
+          
+          // Validación estricta: Verifica que este código no exista ya en todo tu inventario
+          const alreadyExists = inventory.some(item => item.barcode === code);
+          if (!alreadyExists) {
+            isUnique = true;
+          }
+        }
+        
+        setGeneratedQR(code); 
+        return code;
       };
 
       const handleSaveItem = async (e) => {
@@ -229,7 +307,7 @@
       };
 
       const handleDeleteItem = async (id) => {
-        if (window.confirm("¿Seguro que deseas eliminar esto?")) {
+        if (window.confirm("¿Seguro que deseas eliminar este elemento de la base de datos de forma permanente?")) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id));
         }
       };
@@ -241,11 +319,17 @@
       };
 
       const handleBarcodeSubmit = (e) => {
-        e.preventDefault();
+        if(e) e.preventDefault();
         if (!scanInput.trim()) return;
         const foundItem = inventory.find(item => item.barcode === scanInput.trim() || item.catalogNum === scanInput.trim() || item.id === scanInput.trim());
-        if (foundItem) { setScannedItem(foundItem); setScanAmount(1); } else { alert(`Código no encontrado.`); setScannedItem(null); }
-        setScanInput('');
+        if (foundItem) { 
+          setScannedItem(foundItem); 
+          setScanAmount(1); 
+        } else { 
+          alert(`El código "${scanInput}" no se encuentra registrado en el inventario.`); 
+          setScannedItem(null); 
+        }
+        setScanInput(''); // Limpia el input para el siguiente escaneo
       };
 
       const executeScanAction = () => {
@@ -253,9 +337,12 @@
         handleUpdateStock(scannedItem.id, scannedItem.qty, scanAmount, scanAction === 'add');
         setScannedItem({ ...scannedItem, qty: scanAction === 'add' ? scannedItem.qty + scanAmount : scannedItem.qty - scanAmount });
         setScanAction('info');
+        
         const btn = document.getElementById('btn-action-success');
         if(btn) {
-          const originalText = btn.innerHTML; btn.innerHTML = '¡Actualizado!'; btn.classList.add('bg-green-600');
+          const originalText = btn.innerHTML; 
+          btn.innerHTML = '¡Inventario Actualizado!'; 
+          btn.classList.add('bg-green-600');
           setTimeout(() => { btn.innerHTML = originalText; btn.classList.remove('bg-green-600'); }, 2000);
         }
       };
@@ -284,7 +371,7 @@
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-fade-in flex flex-col items-center text-center">
               <div className="bg-blue-600 p-4 rounded-xl text-white mb-6 shadow-lg"><Boxes size={48} /></div>
               <h1 className="text-3xl font-extrabold text-gray-800 mb-2">LabManager</h1>
-              <p className="text-gray-500 font-medium mb-8">Asistente de Inventario</p>
+              <p className="text-gray-500 font-medium mb-8">Asistente de Inventario Profesional</p>
               {loading ? <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-8"></div> : (
                 <button onClick={handleGoogleLogin} className="w-full bg-white border-2 hover:bg-gray-50 text-gray-700 font-bold py-4 px-4 rounded-xl flex items-center justify-center gap-3">
                   <svg className="w-6 h-6" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
@@ -296,8 +383,12 @@
         );
       }
 
+      const lowStockItems = inventory.filter(item => item.qty < item.minThreshold);
+      const expiringItems = getExpiringSoonItems();
+
       return (
         <div className="flex h-screen bg-slate-50 font-sans text-gray-900">
+          {/* SIDEBAR DESKTOP */}
           <aside className="w-64 bg-slate-900 text-slate-300 flex-col hidden md:flex">
             <div className="p-6 border-b border-slate-800">
               <div className="flex items-center gap-3 text-white">
@@ -306,11 +397,11 @@
               </div>
             </div>
             <nav className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
-              <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Panel Central</button>
-              <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${activeTab === 'inventory' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><Folder size={20} /> Carpetas</button>
-              <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg ${activeTab === 'scanner' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><ScanLine size={20} /> Escáner</button>
+              <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Panel Central</button>
+              <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><Folder size={20} /> Carpetas</button>
+              <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'scanner' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><ScanLine size={20} /> Escáner y Cámara</button>
               {currentUserData?.role === 'superadmin' && (
-                <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mt-4 border-t border-slate-800 ${activeTab === 'users' ? 'bg-purple-600 text-white' : 'hover:bg-slate-800 text-purple-400'}`}><Users size={20} /> Accesos</button>
+                <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mt-4 border-t border-slate-800 ${activeTab === 'users' ? 'bg-purple-600 text-white shadow-md' : 'hover:bg-slate-800 text-purple-400'}`}><Users size={20} /> Accesos</button>
               )}
             </nav>
             <div className="p-4 border-t border-slate-800">
@@ -325,136 +416,368 @@
             </div>
           </aside>
 
+          {/* HEADER MOBILE */}
           <main className="flex-1 flex flex-col overflow-hidden">
             <header className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md z-10">
               <span className="font-bold flex items-center gap-2"><Boxes size={24} className="text-blue-500" /> LabManager</span>
               <div className="flex gap-4">
-                <button onClick={() => setActiveTab('dashboard')}><LayoutDashboard size={24}/></button>
-                <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null);}}><Folder size={24}/></button>
-                <button onClick={() => setActiveTab('scanner')}><ScanLine size={24}/></button>
+                <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''}><LayoutDashboard size={24}/></button>
+                <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null);}} className={activeTab === 'inventory' ? 'text-blue-400' : ''}><Folder size={24}/></button>
+                <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''}><ScanLine size={24}/></button>
               </div>
             </header>
 
+            {/* AREA DE CONTENIDO */}
             <div className="flex-1 overflow-y-auto p-4 md:p-8 relative">
               
-              {/* VISTAS */}
+              {/* === VISTA 1: DASHBOARD RESTAURADO (CON REQUISICIONES) === */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-6 animate-fade-in">
-                  <div className="bg-white p-6 rounded-xl border shadow-sm flex justify-between items-center">
-                    <div><h2 className="text-2xl font-bold">Hola, {currentUserData.name.split(' ')[0]}</h2></div>
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1"><ShieldCheck size={16}/> {currentUserData.role === 'superadmin' ? 'Gestor Principal' : 'Usuario'}</span>
+                  <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-800">Hola, {currentUserData.name.split(' ')[0]}</h2>
+                      <p className="text-gray-500">Panel de Control General</p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${currentUserData.role === 'superadmin' ? 'bg-purple-100 text-purple-800' : currentUserData.role === 'admin' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                        <ShieldCheck size={16} /> 
+                        {currentUserData.role === 'superadmin' ? 'Gestor Principal' : currentUserData.role === 'admin' ? 'Administrador' : 'Usuario'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-6 rounded-xl border shadow-sm flex items-center gap-4 cursor-pointer" onClick={() => setActiveTab('inventory')}><div className="p-4 bg-blue-50 text-blue-600 rounded-xl"><Boxes size={32} /></div><div><p className="text-sm text-gray-500">Items Totales</p><p className="text-3xl font-bold">{inventory.length}</p></div></div>
-                    <div className="bg-white p-6 rounded-xl border shadow-sm flex items-center gap-4"><div className="p-4 bg-red-50 text-red-600 rounded-xl"><AlertTriangle size={32} /></div><div><p className="text-sm text-gray-500">Alertas</p><p className="text-3xl font-bold text-red-600">{inventory.filter(i=>i.qty<i.minThreshold).length}</p></div></div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-6 rounded-xl border shadow-sm flex items-center gap-4 cursor-pointer" onClick={() => {setActiveTab('inventory'); setSelectedFolder(null);}}>
+                      <div className="p-4 bg-blue-50 text-blue-600 rounded-xl"><Boxes size={32} /></div>
+                      <div><p className="text-sm text-gray-500 font-medium">Items Registrados</p><p className="text-3xl font-bold">{inventory.length}</p></div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl border shadow-sm flex items-center gap-4 cursor-pointer" onClick={() => setActiveTab('inventory')}>
+                      <div className="p-4 bg-red-50 text-red-600 rounded-xl"><AlertTriangle size={32} /></div>
+                      <div><p className="text-sm text-gray-500 font-medium">Atención de Stock</p><p className="text-3xl font-bold text-red-600">{lowStockItems.length}</p></div>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl border shadow-sm flex items-center gap-4">
+                      <div className="p-4 bg-orange-50 text-orange-600 rounded-xl"><Calendar size={32} /></div>
+                      <div><p className="text-sm text-gray-500 font-medium">Caducan Pronto</p><p className="text-3xl font-bold text-orange-600">{expiringItems.length}</p></div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Panel de Requisiciones */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <ShoppingCart className="text-red-500" size={20} /> Requieren Compra Inmediata
+                      </h3>
+                      <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto pr-2">
+                        {lowStockItems.length === 0 ? <p className="text-gray-500 py-4 text-center">Stock saludable.</p> : null}
+                        {lowStockItems.map(item => (
+                          <div key={item.id} className="py-4 flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-gray-800">{item.name}</p>
+                              <p className="text-xs text-gray-500">Prov: {item.provider || 'N/A'}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <p className="font-bold text-red-600">{item.qty} {item.unit}</p>
+                                <p className="text-xs text-gray-400">Mín: {item.minThreshold}</p>
+                              </div>
+                              <button onClick={() => handleSendPurchaseRequest(item)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors" title="Solicitar Compra por Correo">
+                                <Mail size={20} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Panel de Caducidades Próximas */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <Calendar className="text-orange-500" size={20} /> Caducidades Próximas (30 Días)
+                      </h3>
+                      <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto pr-2">
+                        {expiringItems.length === 0 ? <p className="text-gray-500 py-4 text-center">No hay reactivos por caducar pronto.</p> : null}
+                        {expiringItems.map(item => (
+                          <div key={item.id} className="py-4 flex justify-between items-center">
+                            <div>
+                              <p className="font-bold text-gray-800">{item.name}</p>
+                              <p className="text-sm text-gray-500 flex items-center gap-1"><MapPin size={14}/> {item.location}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-orange-600">{item.expirationDate}</p>
+                              <p className="text-xs font-medium bg-orange-100 text-orange-800 px-2 py-1 rounded mt-1">Usar Primero</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
+              {/* === VISTA 2: CARPETAS === */}
               {activeTab === 'inventory' && !showItemForm && !selectedFolder && (
                 <div className="space-y-6 animate-fade-in">
-                  <h2 className="text-2xl font-bold mb-6">Categorías</h2>
+                  <h2 className="text-2xl font-bold mb-6">Categorías / Carpetas</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {CATEGORIES.map(folder => (
-                      <div key={folder.id} onClick={() => setSelectedFolder(folder.name)} className="bg-white rounded-2xl p-6 shadow-sm border cursor-pointer hover:border-blue-300">
-                        <div className={`p-4 rounded-xl text-3xl inline-block mb-2 ${folder.color}`}>{folder.icon}</div>
-                        <h3 className="text-lg font-bold">{folder.name}</h3>
-                        <p className="text-gray-500 text-sm">{inventory.filter(i => i.category === folder.name).length} elementos</p>
-                      </div>
-                    ))}
+                    {CATEGORIES.map(folder => {
+                       const count = inventory.filter(i => i.category === folder.name).length;
+                       const alerts = inventory.filter(i => i.category === folder.name && i.qty < i.minThreshold).length;
+                       return (
+                        <div key={folder.id} onClick={() => setSelectedFolder(folder.name)} className="bg-white rounded-2xl p-6 shadow-sm border cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className={`p-4 rounded-xl text-3xl inline-block ${folder.color} group-hover:scale-110 transition-transform`}>{folder.icon}</div>
+                            {alerts > 0 && <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1"><AlertTriangle size={12}/> {alerts} alertas</span>}
+                          </div>
+                          <h3 className="text-lg font-bold">{folder.name}</h3>
+                          <p className="text-gray-500 text-sm">{count} elementos</p>
+                        </div>
+                       )
+                    })}
                   </div>
                 </div>
               )}
 
+              {/* === VISTA 3: LISTA DE INVENTARIO (CON BÚSQUEDA CDMX RESTAURADA) === */}
               {activeTab === 'inventory' && !showItemForm && selectedFolder && (
                  <div className="space-y-6 animate-fade-in">
                     <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold flex items-center gap-2"><button onClick={()=>setSelectedFolder(null)} className="mr-2"><ArrowLeft/></button> {selectedFolder}</h2>
+                      <h2 className="text-2xl font-bold flex items-center gap-2"><button onClick={()=>setSelectedFolder(null)} className="mr-2 hover:bg-gray-200 p-1 rounded-full"><ArrowLeft/></button> {selectedFolder}</h2>
                       {(currentUserData.role === 'superadmin' || currentUserData.role === 'admin') && (
-                        <button onClick={()=>{setEditingItem(null); setShowItemForm(true);}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"><Plus size={20}/> Añadir</button>
+                        <button onClick={()=>{setEditingItem(null); setShowItemForm(true); setGeneratedQR('');}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Plus size={20}/> Añadir</button>
                       )}
                     </div>
                     <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                       <table className="w-full text-left">
-                         <thead className="bg-gray-50"><tr><th className="p-4">Producto</th><th className="p-4">Stock</th><th className="p-4">Acciones</th></tr></thead>
-                         <tbody className="divide-y">
-                           {inventory.filter(i => i.category === selectedFolder).map(item => (
-                             <tr key={item.id} className="hover:bg-gray-50">
-                               <td className="p-4"><p className="font-bold">{item.name}</p><p className="text-xs text-gray-500">{item.barcode}</p></td>
-                               <td className="p-4 font-bold text-lg">{item.qty} <span className="text-sm font-normal">{item.unit}</span></td>
-                               <td className="p-4 flex gap-2">
-                                  <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit({preventDefault:()=>{}}),50)}} className="text-blue-600 bg-blue-50 p-2 rounded"><ScanLine size={18}/></button>
-                                  {currentUserData.role === 'superadmin' && <button onClick={()=>handleDeleteItem(item.id)} className="text-red-600 bg-red-50 p-2 rounded"><LogOut size={18}/></button>}
-                               </td>
-                             </tr>
-                           ))}
-                         </tbody>
-                       </table>
+                       <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                         <Search className="text-gray-400" size={20} />
+                         <input type="text" placeholder="Buscar por nombre, código o marca..." className="w-full bg-transparent border-none focus:outline-none text-gray-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                       </div>
+                       <div className="overflow-x-auto">
+                         <table className="w-full text-left">
+                           <thead className="bg-gray-50"><tr><th className="p-4">Producto</th><th className="p-4">Info Extra</th><th className="p-4">Ubicación</th><th className="p-4 text-right">Stock</th><th className="p-4 text-center">Acciones</th></tr></thead>
+                           <tbody className="divide-y divide-gray-100">
+                             {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || (i.brand && i.brand.toLowerCase().includes(searchQuery.toLowerCase())))).map(item => {
+                               const isLow = item.qty < item.minThreshold;
+                               const searchUrlCDMX = `https://www.google.com/search?q=${encodeURIComponent(item.name + " " + (item.brand||'') + " proveedor CDMX")}`;
+                               return (
+                                 <tr key={item.id} className="hover:bg-gray-50">
+                                   <td className="p-4">
+                                     <p className="font-bold">{item.name}</p>
+                                     <div className="mt-1 flex items-center gap-1 text-xs text-gray-500 font-mono"><QrCode size={12}/> ID: {item.barcode}</div>
+                                   </td>
+                                   <td className="p-4 text-xs text-gray-600">
+                                     <p>Prov: {item.provider || 'N/A'}</p>
+                                     <p>Marca: {item.brand || 'N/A'}</p>
+                                     {item.expirationDate && <p className="text-orange-600 mt-1 flex items-center gap-1"><Calendar size={12}/> {item.expirationDate}</p>}
+                                   </td>
+                                   <td className="p-4 text-sm text-center">
+                                      <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded-full text-xs font-medium"><MapPin size={12}/> {item.location}</span>
+                                   </td>
+                                   <td className="p-4 text-right">
+                                     <span className={`font-bold text-lg ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty}</span>
+                                     <span className="text-sm text-gray-500 ml-1">{item.unit}</span>
+                                     {isLow && <p className="text-xs text-red-500 font-medium">¡Reponer!</p>}
+                                   </td>
+                                   <td className="p-4">
+                                      <div className="flex justify-center gap-2">
+                                        <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="text-blue-600 bg-blue-50 p-2 rounded hover:bg-blue-100" title="Escanear"><ScanLine size={18}/></button>
+                                        <a href={searchUrlCDMX} target="_blank" rel="noopener noreferrer" className="text-green-600 bg-green-50 p-2 rounded hover:bg-green-100" title="Buscar en CDMX"><ExternalLink size={18}/></a>
+                                        {(currentUserData.role === 'superadmin' || currentUserData.role === 'admin') && (
+                                          <button onClick={()=>{setEditingItem(item); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2 rounded hover:bg-gray-200"><Settings size={18} /></button>
+                                        )}
+                                        {currentUserData.role === 'superadmin' && (
+                                          <button onClick={()=>handleDeleteItem(item.id)} className="text-red-600 bg-red-50 p-2 rounded hover:bg-red-100"><LogOut size={18} className="transform rotate-180" /></button>
+                                        )}
+                                      </div>
+                                   </td>
+                                 </tr>
+                               )
+                             })}
+                           </tbody>
+                         </table>
+                       </div>
                     </div>
                  </div>
               )}
 
+              {/* === VISTA 4: FORMULARIO === */}
               {activeTab === 'inventory' && showItemForm && (
-                <div className="bg-white p-6 rounded-xl border max-w-2xl mx-auto">
-                  <h2 className="text-xl font-bold mb-4">{editingItem ? 'Editar' : 'Añadir'} Producto</h2>
-                  <form onSubmit={handleSaveItem} className="space-y-4">
-                    <input name="name" defaultValue={editingItem?.name} required placeholder="Nombre" className="w-full p-2 border rounded" />
-                    <div className="flex gap-2">
-                      <input name="barcode" defaultValue={editingItem?.barcode || generatedQR} placeholder="Código QR/Barras" className="flex-1 p-2 border rounded font-mono" />
-                      <button type="button" onClick={generateUniqueQR} className="bg-blue-100 text-blue-700 px-4 rounded"><QrCode/></button>
+                <div className="bg-white p-6 rounded-xl border max-w-4xl mx-auto shadow-lg animate-fade-in">
+                  <div className="flex justify-between items-center mb-6 border-b pb-4">
+                    <h2 className="text-xl font-bold flex items-center gap-2">{editingItem ? <Settings className="text-blue-500"/> : <Plus className="text-green-500"/>} {editingItem ? 'Editar Producto' : 'Registrar Nuevo Producto'}</h2>
+                  </div>
+                  <form onSubmit={handleSaveItem} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="col-span-1 md:col-span-2">
+                      <label className="block text-sm font-bold text-gray-700 mb-1">Nombre del Producto</label>
+                      <input name="name" defaultValue={editingItem?.name} required className="w-full p-3 border border-gray-300 rounded-lg" />
                     </div>
-                    <select name="category" defaultValue={editingItem?.category || selectedFolder} className="w-full p-2 border rounded">
+                    
+                    <div className="col-span-1 md:col-span-2 bg-blue-50 p-6 rounded-xl border border-blue-100 flex flex-col sm:flex-row gap-6 items-center">
+                      <div className="flex-1 w-full space-y-3">
+                        <label className="block text-sm font-bold text-blue-900">Código Único (Barras / QR)</label>
+                        <div className="flex gap-2">
+                          <input name="barcode" defaultValue={editingItem?.barcode || generatedQR} key={generatedQR} placeholder="Escanea el código o genera uno..." className="flex-1 p-3 border border-blue-200 rounded-lg font-mono text-lg" />
+                          <button type="button" onClick={generateUniqueQR} className="bg-blue-600 text-white font-bold px-4 py-3 rounded-lg flex items-center gap-2"><QrCode size={20}/> Generar</button>
+                        </div>
+                      </div>
+                      {(generatedQR || editingItem?.barcode) && (
+                        <div className="bg-white p-2 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center">
+                          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${generatedQR || editingItem?.barcode}`} alt="QR" className="w-20 h-20" />
+                        </div>
+                      )}
+                    </div>
+
+                    <select name="category" defaultValue={editingItem?.category || selectedFolder} className="w-full p-3 border rounded-lg">
                       {CATEGORIES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
-                    <div className="flex gap-4">
-                      <input type="number" name="qty" defaultValue={editingItem?.qty || 0} placeholder="Stock Actual" className="w-full p-2 border rounded" />
-                      <input type="number" name="minThreshold" defaultValue={editingItem?.minThreshold || 1} placeholder="Mínimo" className="w-full p-2 border rounded" />
-                      <input name="unit" defaultValue={editingItem?.unit || 'uds'} placeholder="Unidad" className="w-full p-2 border rounded" />
+                    <input name="provider" defaultValue={editingItem?.provider} placeholder="Proveedor" className="w-full p-3 border rounded-lg" />
+                    <input name="brand" defaultValue={editingItem?.brand} placeholder="Marca" className="w-full p-3 border rounded-lg" />
+                    <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3 border rounded-lg" title="Caducidad" />
+
+                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="bg-gray-50 p-4 rounded-lg border">
+                        <label className="block text-sm font-bold mb-1">Stock Actual</label>
+                        <input type="number" name="qty" defaultValue={editingItem?.qty || 0} required className="w-full p-2 border rounded-md font-bold text-xl" />
+                      </div>
+                      <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                        <label className="block text-sm font-bold text-red-700 mb-1">Alerta Mínima</label>
+                        <input type="number" name="minThreshold" defaultValue={editingItem?.minThreshold || 1} required className="w-full p-2 border rounded-md font-bold text-xl text-red-700" />
+                      </div>
+                      <div className="bg-gray-50 p-4 rounded-lg border">
+                        <label className="block text-sm font-bold mb-1">Unidad (ej. ml)</label>
+                        <input name="unit" defaultValue={editingItem?.unit || 'uds'} className="w-full p-2 border rounded-md text-lg" />
+                      </div>
                     </div>
-                    <input name="location" defaultValue={editingItem?.location} placeholder="Ubicación (Ej. Refri 1)" className="w-full p-2 border rounded" />
-                    <div className="flex gap-2 pt-4">
-                      <button type="button" onClick={()=>setShowItemForm(false)} className="flex-1 bg-gray-100 p-3 rounded font-bold">Cancelar</button>
-                      <button type="submit" className="flex-1 bg-green-600 text-white p-3 rounded font-bold">Guardar</button>
+                    <div className="col-span-1 md:col-span-2">
+                      <input name="location" defaultValue={editingItem?.location} placeholder="Ubicación Física (Ej. Estante A)" className="w-full p-3 border rounded-lg" />
+                    </div>
+                    <div className="col-span-1 md:col-span-2 flex gap-4 pt-4">
+                      <button type="button" onClick={()=>setShowItemForm(false)} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-4 rounded-xl text-lg">Cancelar</button>
+                      <button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl text-lg shadow-lg">Guardar Base</button>
                     </div>
                   </form>
                 </div>
               )}
 
+              {/* === VISTA 5: ESCÁNER COMPLETO (RESTAURADO CON CÁMARA REAL) === */}
               {activeTab === 'scanner' && (
-                <div className="max-w-2xl mx-auto space-y-6">
-                  <div className="bg-white p-6 rounded-xl border text-center">
-                    <h2 className="text-xl font-bold mb-4">Lector de Inventario</h2>
-                    <form onSubmit={handleBarcodeSubmit} className="relative">
-                      <ScanLine className="absolute left-3 top-3 text-gray-400" />
-                      <input ref={scannerInputRef} type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="Escanea aquí..." className="w-full pl-10 pr-4 py-3 border-2 border-blue-200 rounded-lg focus:border-blue-500 font-mono text-xl" autoFocus />
-                    </form>
+                <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
+                  <div className="text-center mb-8">
+                    <h2 className="text-3xl font-bold text-gray-800">Terminal de Escaneo</h2>
+                    <p className="text-gray-500 mt-2">Usa la cámara de tu móvil/tablet o conecta un lector láser.</p>
                   </div>
-                  {scannedItem && (
-                    <div className="bg-white p-6 rounded-xl border border-blue-200">
-                       <h3 className="text-xl font-bold">{scannedItem.name}</h3>
-                       <p className="text-gray-500 mb-4">Stock: {scannedItem.qty} {scannedItem.unit}</p>
-                       <div className="flex gap-4">
-                          <input type="number" min="1" value={scanAmount} onChange={(e)=>setScanAmount(Number(e.target.value))} className="w-24 text-center border rounded font-bold text-xl" />
-                          <button onClick={()=>{setScanAction('remove'); executeScanAction();}} className="flex-1 bg-orange-500 text-white font-bold rounded py-2">Consumir</button>
-                          <button onClick={()=>{setScanAction('add'); executeScanAction();}} className="flex-1 bg-green-600 text-white font-bold rounded py-2">Ingresar</button>
-                       </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    
+                    {/* PANEL IZQUIERDO: LECTURA */}
+                    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 flex flex-col items-center">
+                      <div className="w-full max-w-sm space-y-6">
+                        
+                        {/* Opción Cámara */}
+                        <div className="space-y-3">
+                          <label className="text-sm font-bold text-gray-700 flex items-center gap-2"><Camera size={18} /> Cámara Inteligente</label>
+                          {!cameraActive ? (
+                            <button onClick={() => setCameraActive(true)} className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md transition-all">
+                              <Camera size={24} /> Encender Cámara
+                            </button>
+                          ) : (
+                            <div className="space-y-4">
+                              <div id="qr-reader" className="shadow-inner"></div>
+                              <button onClick={() => setCameraActive(false)} className="w-full py-3 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
+                                <X size={20} /> Apagar Cámara
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="relative flex items-center py-2"><div className="flex-grow border-t border-gray-200"></div><span className="flex-shrink-0 mx-4 text-gray-400 text-sm">Ó USA</span><div className="flex-grow border-t border-gray-200"></div></div>
+
+                        {/* Opción Teclado/Láser */}
+                        <form id="scanner-form" onSubmit={handleBarcodeSubmit} className="space-y-3">
+                          <label className="text-sm font-bold text-gray-700 flex items-center gap-2"><Keyboard size={18} /> Lector Láser / Manual</label>
+                          <div className="relative">
+                            <ScanLine className="absolute left-4 top-1/2 transform -translate-y-1/2 text-blue-500" size={24} />
+                            <input ref={scannerInputRef} type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="Escanea código aquí..." className="w-full pl-12 pr-4 py-4 bg-blue-50 border-2 border-blue-200 rounded-xl focus:border-blue-600 focus:bg-white font-mono text-xl shadow-inner transition-all outline-none" autoFocus />
+                          </div>
+                          <button type="submit" id="hidden-submit" className="hidden">Submit</button>
+                        </form>
+                      </div>
                     </div>
-                  )}
+
+                    {/* PANEL DERECHO: ACCIÓN */}
+                    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 flex flex-col min-h-[400px]">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4 border-b border-gray-100 pb-4">Acción en Inventario</h3>
+                      
+                      {!scannedItem ? (
+                        <div className="flex-1 flex flex-col items-center justify-center text-gray-300 space-y-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                          <PackageSearch size={64} />
+                          <p className="font-medium">Esperando lectura de producto...</p>
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex flex-col animate-fade-in">
+                          <div className="mb-6">
+                            <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-full mb-3">{scannedItem.category}</span>
+                            <h4 className="text-2xl font-bold text-gray-900 leading-tight">{scannedItem.name}</h4>
+                            <p className="text-sm font-mono text-gray-500 mt-2 flex items-center gap-1"><QrCode size={14}/> ID: {scannedItem.barcode}</p>
+                          </div>
+                          
+                          <div className="bg-slate-50 rounded-xl p-5 mb-6 grid grid-cols-2 gap-6 border border-slate-200">
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-1">Stock Actual</p>
+                              <p className={`text-3xl font-bold ${scannedItem.qty < scannedItem.minThreshold ? 'text-red-600' : 'text-gray-800'}`}>
+                                {scannedItem.qty} <span className="text-lg font-normal text-gray-500">{scannedItem.unit}</span>
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-1">Ubicación</p>
+                              <p className="text-base font-medium text-gray-800 flex items-center gap-1"><MapPin size={16} className="text-blue-500"/> {scannedItem.location}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-auto space-y-4">
+                            <div className="flex bg-gray-100 p-1 rounded-xl">
+                              <button onClick={() => setScanAction('remove')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${scanAction === 'remove' ? 'bg-orange-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Tomar / Consumir</button>
+                              <button onClick={() => setScanAction('add')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${scanAction === 'add' ? 'bg-green-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Ingresar Lote</button>
+                            </div>
+                            <div className="flex gap-4">
+                              <div className="flex items-center border-2 border-gray-200 rounded-xl bg-white w-32 shadow-sm">
+                                <button onClick={() => setScanAmount(Math.max(1, scanAmount - 1))} className="p-3 hover:bg-gray-50 text-gray-600 rounded-l-xl"><Minus size={16}/></button>
+                                <input type="number" min="1" value={scanAmount} onChange={(e) => setScanAmount(parseInt(e.target.value) || 1)} className="w-full text-center font-bold text-xl outline-none"/>
+                                <button onClick={() => setScanAmount(scanAmount + 1)} className="p-3 hover:bg-gray-50 text-gray-600 rounded-r-xl"><Plus size={16}/></button>
+                              </div>
+                              <button id="btn-action-success" onClick={executeScanAction} className={`flex-1 py-3 rounded-xl font-bold text-white shadow-lg transition-all transform hover:-translate-y-1 ${scanAction === 'add' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-600 hover:bg-orange-500'}`}>
+                                Confirmar {scanAction === 'add' ? 'Ingreso' : 'Retiro'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
+              {/* === VISTA 6: ACCESOS === */}
               {activeTab === 'users' && currentUserData.role === 'superadmin' && (
-                <div className="bg-white rounded-xl border overflow-hidden">
-                  <div className="bg-purple-800 text-white p-4 font-bold">Gestión de Usuarios (Accesos Google)</div>
+                <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden max-w-5xl mx-auto animate-fade-in">
+                  <div className="bg-purple-900 text-white p-8">
+                    <h2 className="text-2xl font-bold flex items-center gap-2 mb-2"><ShieldAlert /> Panel de Administración de Accesos</h2>
+                    <p className="text-purple-200 text-sm">Gestiona quién puede ver y editar la base de datos de LabManager.</p>
+                  </div>
                   <table className="w-full text-left">
-                    <tbody className="divide-y">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr><th className="p-4 font-bold text-gray-600">Usuario</th><th className="p-4 font-bold text-gray-600">Nivel de Acceso</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
                       {allUsers.map(u => (
-                        <tr key={u.uid}>
-                          <td className="p-4"><p className="font-bold">{u.name}</p><p className="text-xs">{u.email}</p></td>
+                        <tr key={u.uid} className={`hover:bg-gray-50 ${u.email === SUPER_ADMIN_EMAIL ? 'bg-purple-50' : ''}`}>
+                          <td className="p-4"><p className="font-bold text-gray-800">{u.name}</p><p className="text-xs text-gray-500">{u.email}</p></td>
                           <td className="p-4">
-                            {u.email !== SUPER_ADMIN_EMAIL && (
-                              <select value={u.role || 'user'} onChange={(e)=>handleUpdateUserRole(u.uid, e.target.value)} className="p-2 border rounded">
-                                <option value="user">Técnico (Solo uso)</option><option value="admin">Gestor (Añadir)</option>
+                            {u.email === SUPER_ADMIN_EMAIL ? (
+                              <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-xs font-bold">Propietario / Gestor Principal</span>
+                            ) : (
+                              <select value={u.role || 'user'} onChange={(e)=>handleUpdateUserRole(u.uid, e.target.value)} className="p-2 border border-gray-300 rounded-lg shadow-sm font-medium focus:ring-2 focus:ring-purple-500 outline-none">
+                                <option value="user">Técnico (Solo consultar y escanear)</option>
+                                <option value="admin">Administrador (Puede editar inventario)</option>
                               </select>
                             )}
                           </td>
