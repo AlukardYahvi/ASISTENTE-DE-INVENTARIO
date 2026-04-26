@@ -89,6 +89,7 @@
       
       const [activeTab, setActiveTab] = useState('dashboard');
       const [inventory, setInventory] = useState([]);
+      const [logs, setLogs] = useState([]); // Nuevo estado para el Historial
       const [searchQuery, setSearchQuery] = useState('');
       const [loading, setLoading] = useState(true);
 
@@ -102,6 +103,7 @@
       const [scanAction, setScanAction] = useState('info');
       const [scanAmount, setScanAmount] = useState(1);
       const [cameraActive, setCameraActive] = useState(false);
+      const [cameraActiveForm, setCameraActiveForm] = useState(false);
       
       const scannerInputRef = useRef(null);
       const hiddenSubmitBtnRef = useRef(null);
@@ -144,12 +146,14 @@
           return;
         }
 
+        // 1. Escuchar Inventario
         const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
         const unsubInv = onSnapshot(inventoryRef, (snapshot) => {
           setInventory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
           setLoading(false);
         });
 
+        // 2. Escuchar Usuarios
         const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'lab_users');
         const unsubUsers = onSnapshot(usersRef, (snapshot) => {
           const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -161,7 +165,15 @@
           }
         });
 
-        return () => { unsubInv(); unsubUsers(); };
+        // 3. Escuchar Historial de Movimientos
+        const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+        const unsubLogs = onSnapshot(logsRef, (snapshot) => {
+          const logsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          // Ordenar del más reciente al más antiguo
+          setLogs(logsList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+        });
+
+        return () => { unsubInv(); unsubUsers(); unsubLogs(); };
       }, [firebaseUser]);
 
       // --- EFECTO DE LA CÁMARA (LIBRERÍA HTML5-QRCODE) ---
@@ -192,6 +204,27 @@
         };
       }, [cameraActive, activeTab]);
 
+      // --- EFECTO DE LA CÁMARA PARA REGISTRO DE PRODUCTOS ---
+      useEffect(() => {
+        let formScanner;
+        if (cameraActiveForm && showItemForm) {
+          formScanner = new Html5QrcodeScanner(
+            "qr-reader-form",
+            { fps: 10, qrbox: { width: 250, height: 150 } },
+            false
+          );
+          formScanner.render((decodedText) => {
+            setGeneratedQR(decodedText); // Guarda el código escaneado en el formulario
+            setCameraActiveForm(false);
+            formScanner.clear();
+          }, (error) => {});
+        }
+        return () => {
+          if (formScanner) {
+            formScanner.clear().catch(e => console.error("Error limpiando cámara", e));
+          }
+        };
+      }, [cameraActiveForm, showItemForm]);
 
       // --- FUNCIONES RESTAURADAS: ALERTAS Y CORREOS ---
       const getExpiringSoonItems = () => {
@@ -374,9 +407,33 @@
         setScanInput(''); // Limpia el input para el siguiente escaneo
       };
 
-      const executeScanAction = () => {
+      const executeScanAction = async () => {
         if (!scannedItem) return;
-        handleUpdateStock(scannedItem.id, scannedItem.qty, scanAmount, scanAction === 'add');
+
+        // SEGURIDAD: Bloquear intentos de ingreso de usuarios no autorizados
+        if (scanAction === 'add' && currentUserData.role === 'user') {
+          alert("Seguridad: No tienes permisos para ingresar stock al laboratorio. Solo puedes consumir o consultar.");
+          return;
+        }
+
+        await handleUpdateStock(scannedItem.id, scannedItem.qty, scanAmount, scanAction === 'add');
+
+        // REGISTRO DE AUDITORÍA (Historial)
+        if (scanAction === 'add' || scanAction === 'remove') {
+          try {
+            const logId = `log_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), {
+              itemId: scannedItem.id,
+              itemName: scannedItem.name,
+              action: scanAction,
+              amount: scanAmount,
+              userName: currentUserData.name,
+              userEmail: currentUserData.email,
+              timestamp: new Date().toISOString()
+            });
+          } catch(e) { console.error("Error guardando historial de auditoría", e); }
+        }
+
         setScannedItem({ ...scannedItem, qty: scanAction === 'add' ? scannedItem.qty + scanAmount : scannedItem.qty - scanAmount });
         setScanAction('info');
         
@@ -442,6 +499,11 @@
               <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Panel Central</button>
               <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><Folder size={20} /> Carpetas</button>
               <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'scanner' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><ScanLine size={20} /> Escáner y Cámara</button>
+              
+              {/* Opciones Avanzadas Solo para Admin/Superadmin */}
+              {(currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin') && (
+                <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'history' ? 'bg-slate-700 text-white shadow-md' : 'hover:bg-slate-800 text-slate-400'}`}><History size={20} /> Historial Operativo</button>
+              )}
               {currentUserData?.role === 'superadmin' && (
                 <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mt-4 border-t border-slate-800 ${activeTab === 'users' ? 'bg-purple-600 text-white shadow-md' : 'hover:bg-slate-800 text-purple-400'}`}><Users size={20} /> Accesos</button>
               )}
@@ -585,7 +647,7 @@
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold flex items-center gap-2"><button onClick={()=>setSelectedFolder(null)} className="mr-2 hover:bg-gray-200 p-1 rounded-full"><ArrowLeft/></button> {selectedFolder}</h2>
                       {(currentUserData.role === 'superadmin' || currentUserData.role === 'admin') && (
-                        <button onClick={()=>{setEditingItem(null); setShowItemForm(true); setGeneratedQR('');}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Plus size={20}/> Añadir</button>
+                        <button onClick={()=>{setEditingItem(null); setGeneratedQR(''); setShowItemForm(true);}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md"><Plus size={20}/> Añadir</button>
                       )}
                     </div>
                     <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -625,7 +687,7 @@
                                         <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="text-blue-600 bg-blue-50 p-2 rounded hover:bg-blue-100" title="Escanear"><ScanLine size={18}/></button>
                                         <a href={searchUrlCDMX} target="_blank" rel="noopener noreferrer" className="text-green-600 bg-green-50 p-2 rounded hover:bg-green-100" title="Buscar en CDMX"><ExternalLink size={18}/></a>
                                         {(currentUserData.role === 'superadmin' || currentUserData.role === 'admin') && (
-                                          <button onClick={()=>{setEditingItem(item); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2 rounded hover:bg-gray-200"><Settings size={18} /></button>
+                                          <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode || ''); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2 rounded hover:bg-gray-200"><Settings size={18} /></button>
                                         )}
                                         {currentUserData.role === 'superadmin' && (
                                           <button onClick={()=>handleDeleteItem(item.id)} className="text-red-600 bg-red-50 p-2 rounded hover:bg-red-100"><LogOut size={18} className="transform rotate-180" /></button>
@@ -658,19 +720,27 @@
                     <div className="col-span-1 md:col-span-2 bg-blue-50 p-6 rounded-xl border border-blue-100">
                       <h3 className="text-lg font-bold text-blue-900 mb-2 flex items-center gap-2"><QrCode size={20}/> Identificación Única (Barras / QR)</h3>
                       <p className="text-sm text-blue-800 mb-4">
-                        <strong>Opción A:</strong> Si el producto ya tiene código de barras de fábrica, escanealo o escríbelo en el recuadro abajo.<br/>
-                        <strong>Opción B:</strong> Si no tiene, presiona "Generar ID Único" e imprime su propia etiqueta QR.
+                        <strong>Opción A:</strong> Presiona "Cámara" para escanear el código de fábrica de la caja.<br/>
+                        <strong>Opción B:</strong> Si no tiene, presiona "Generar LAB" e imprime su propia etiqueta.
                       </p>
                       
-                      <div className="flex flex-col sm:flex-row gap-6 items-center">
-                        <div className="flex-1 w-full flex gap-2">
-                          <input name="barcode" defaultValue={editingItem?.barcode || generatedQR} key={generatedQR} placeholder="Escanea o genera un código..." className="flex-1 p-3 border border-blue-300 rounded-lg font-mono text-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-                          <button type="button" onClick={generateUniqueQR} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-3 rounded-lg flex items-center gap-2 transition-colors"><QrCode size={20}/> Generar ID Único</button>
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-wrap gap-2">
+                          <input name="barcode" value={generatedQR} onChange={(e) => setGeneratedQR(e.target.value)} placeholder="Escanea de fábrica o genera uno..." className="flex-1 min-w-[200px] p-3 border border-blue-300 rounded-lg font-mono text-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" />
+                          <button type="button" onClick={() => setCameraActiveForm(!cameraActiveForm)} className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-3 rounded-lg flex items-center gap-2 transition-colors"><Camera size={20}/> Cámara</button>
+                          <button type="button" onClick={generateUniqueQR} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-3 rounded-lg flex items-center gap-2 transition-colors"><QrCode size={20}/> Generar LAB</button>
                         </div>
                         
-                        {(generatedQR || editingItem?.barcode) && (
-                          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center min-w-[120px]">
-                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${generatedQR || editingItem?.barcode}`} alt="QR" className="w-20 h-20 mb-2" />
+                        {cameraActiveForm && (
+                          <div className="w-full max-w-sm mx-auto">
+                            <div id="qr-reader-form" className="shadow-inner rounded-xl overflow-hidden border-2 border-slate-800 bg-black"></div>
+                            <button type="button" onClick={() => setCameraActiveForm(false)} className="w-full mt-2 py-3 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg flex justify-center items-center gap-2 transition-colors"><X size={18}/> Cancelar Escaneo</button>
+                          </div>
+                        )}
+                        
+                        {generatedQR && !cameraActiveForm && (
+                          <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center self-start min-w-[120px]">
+                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${generatedQR}`} alt="QR" className="w-20 h-20 mb-2" />
                             <button type="button" onClick={() => handlePrintLabel(editingItem, generatedQR)} className="text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 px-2 py-1 rounded font-bold w-full flex items-center justify-center gap-1">
                               <Printer size={12}/> Imprimir
                             </button>
@@ -714,7 +784,7 @@
                 </div>
               )}
 
-              {/* === VISTA 5: ESCÁNER COMPLETO (INFORMACIÓN DETALLADA AÑADIDA) === */}
+              {/* === VISTA 5: ESCÁNER COMPLETO === */}
               {activeTab === 'scanner' && (
                 <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
                   <div className="text-center mb-8">
@@ -776,7 +846,6 @@
                             <p className="text-sm font-mono text-gray-500 mt-2 flex items-center gap-1"><QrCode size={14}/> ID: {scannedItem.barcode}</p>
                           </div>
                           
-                          {/* INFORMACIÓN DETALLADA AGREGADA AQUÍ */}
                           <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm border border-gray-100 grid grid-cols-2 gap-2">
                             <p><span className="text-gray-500 font-bold">Marca:</span> {scannedItem.brand || 'No registrada'}</p>
                             <p><span className="text-gray-500 font-bold">Proveedor:</span> {scannedItem.provider || 'No registrado'}</p>
@@ -806,7 +875,11 @@
                             <div className="flex bg-gray-100 p-1 rounded-xl">
                               <button onClick={() => setScanAction('info')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${scanAction === 'info' ? 'bg-white shadow-md text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>Solo Auditoría</button>
                               <button onClick={() => setScanAction('remove')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${scanAction === 'remove' ? 'bg-orange-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Consumir</button>
-                              <button onClick={() => setScanAction('add')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${scanAction === 'add' ? 'bg-green-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Ingresar</button>
+                              
+                              {/* Botón de Ingreso solo visible para Administradores */}
+                              {(currentUserData.role === 'superadmin' || currentUserData.role === 'admin') && (
+                                <button onClick={() => setScanAction('add')} className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${scanAction === 'add' ? 'bg-green-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}>Ingresar</button>
+                              )}
                             </div>
                             
                             {scanAction !== 'info' && (
@@ -829,7 +902,49 @@
                 </div>
               )}
 
-              {/* === VISTA 6: ACCESOS === */}
+              {/* === VISTA 6: HISTORIAL DE MOVIMIENTOS (Solo Administradores) === */}
+              {activeTab === 'history' && (currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin') && (
+                <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden max-w-5xl mx-auto animate-fade-in">
+                  <div className="bg-slate-800 text-white p-8">
+                    <h2 className="text-2xl font-bold flex items-center gap-2 mb-2"><History /> Historial Operativo</h2>
+                    <p className="text-slate-300 text-sm">Auditoría completa. Revisa quién, qué y cuándo se modificó el inventario.</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="p-4 font-bold text-gray-600">Fecha y Hora</th>
+                          <th className="p-4 font-bold text-gray-600">Usuario</th>
+                          <th className="p-4 font-bold text-gray-600 text-center">Acción</th>
+                          <th className="p-4 font-bold text-gray-600">Producto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {logs.slice(0, 100).map(log => (
+                          <tr key={log.id} className="hover:bg-gray-50">
+                            <td className="p-4 text-sm text-gray-500">{new Date(log.timestamp).toLocaleString()}</td>
+                            <td className="p-4">
+                              <p className="font-bold text-gray-800">{log.userName}</p>
+                              <p className="text-xs text-gray-400">{log.userEmail}</p>
+                            </td>
+                            <td className="p-4 text-center">
+                              <span className={`px-3 py-1 rounded-full text-xs font-bold ${log.action === 'add' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
+                                {log.action === 'add' ? '+' : '-'}{log.amount} {log.action === 'add' ? 'Ingresado' : 'Consumido'}
+                              </span>
+                            </td>
+                            <td className="p-4 font-bold text-gray-700">{log.itemName}</td>
+                          </tr>
+                        ))}
+                        {logs.length === 0 && (
+                          <tr><td colSpan="4" className="p-8 text-center text-gray-500 font-medium">Aún no hay movimientos registrados en el inventario.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* === VISTA 7: ACCESOS === */}
               {activeTab === 'users' && currentUserData.role === 'superadmin' && (
                 <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden max-w-5xl mx-auto animate-fade-in">
                   <div className="bg-purple-900 text-white p-8">
@@ -849,8 +964,8 @@
                               <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-xs font-bold">Propietario / Gestor Principal</span>
                             ) : (
                               <select value={u.role || 'user'} onChange={(e)=>handleUpdateUserRole(u.uid, e.target.value)} className="p-2 border border-gray-300 rounded-lg shadow-sm font-medium focus:ring-2 focus:ring-purple-500 outline-none">
-                                <option value="user">Técnico (Solo consultar y escanear)</option>
-                                <option value="admin">Administrador (Puede editar inventario)</option>
+                                <option value="user">Técnico (Solo consultar y consumir)</option>
+                                <option value="admin">Gestor (Añadir e ingresar inventario)</option>
                               </select>
                             )}
                           </td>
