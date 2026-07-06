@@ -47,7 +47,7 @@
       Camera, Keyboard, CheckCircle2, PackageSearch, MapPin, History,
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
-      Image: ImageIcon, Truck, Beaker, FileText
+      Image: ImageIcon, Truck, Beaker, FileText, Download
     } = LucideIcons;
 
     // =====================================================================
@@ -266,6 +266,42 @@
         );
         window.location.href = `mailto:${emailTo}?subject=${subject}&body=${body}`;
         handleToggleOrderStatus(item); // Auto-marcar como ordenado
+      };
+
+      // --- NUEVA FUNCIÓN: EXPORTAR A CSV (RESPALDO PARA DRIVE) ---
+      const handleExportCSV = () => {
+        if (!isAdmin) return alert("Solo los administradores pueden exportar la base de datos.");
+        
+        // Crear las cabeceras del archivo Excel/CSV
+        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Proyecto', 'Proveedor', 'Marca', 'Cantidad', 'Unidad', 'Minimo_Requerido', 'Ubicacion', 'Fecha_Caducidad'];
+        
+        // Mapear los datos del inventario a filas
+        const rows = inventory.map(item => [
+          `"${item.barcode || item.id}"`,
+          `"${item.name}"`,
+          `"${item.category}"`,
+          `"${item.project || ''}"`,
+          `"${item.provider || ''}"`,
+          `"${item.brand || ''}"`,
+          item.qty,
+          `"${item.unit}"`,
+          item.minThreshold,
+          `"${item.location}"`,
+          `"${item.expirationDate || ''}"`
+        ]);
+
+        // Unir cabeceras y filas con comas (formato CSV)
+        const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
+        
+        // Crear un enlace invisible para forzar la descarga
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Respaldo_Inventario_LabManager_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       };
 
       // --- FUNCIONES DE LOGIN ---
@@ -626,7 +662,14 @@
               {/* === VISTA 2: CARPETAS (LabCollector Style) === */}
               {activeTab === 'inventory' && !showItemForm && !selectedFolder && (
                 <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-                  <h2 className="text-3xl font-extrabold text-gray-900 mb-8 tracking-tight">Catálogo de Inventario</h2>
+                  <div className="flex justify-between items-center mb-8">
+                    <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Catálogo de Inventario</h2>
+                    {isAdmin && (
+                      <button onClick={handleExportCSV} className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
+                        <Download size={18}/> Exportar a Excel (Drive)
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {CATEGORIES.map(folder => {
                        const items = inventory.filter(i => i.category === folder.name);
@@ -655,9 +698,18 @@
                         <button onClick={()=>setSelectedFolder(null)} className="hover:bg-gray-200 p-2 rounded-full transition-colors"><ArrowLeft size={24}/></button> 
                         {selectedFolder}
                       </h2>
-                      {isAdmin && (
-                        <button onClick={()=>{setEditingItem(null); setGeneratedQR(''); setShowItemForm(true);}} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg transition-transform hover:-translate-y-1"><Plus size={20}/> Registrar Nuevo</button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {isAdmin && (
+                          <>
+                            <button onClick={handleExportCSV} className="bg-green-100 hover:bg-green-200 text-green-700 font-bold px-4 py-3 rounded-xl flex items-center gap-2 shadow-sm transition-colors">
+                              <Download size={20}/> Exportar
+                            </button>
+                            <button onClick={()=>{setEditingItem(null); setGeneratedQR(''); setShowItemForm(true);}} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg transition-transform hover:-translate-y-1">
+                              <Plus size={20}/> Registrar Nuevo
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
