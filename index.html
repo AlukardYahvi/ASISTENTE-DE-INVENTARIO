@@ -6,19 +6,15 @@
   <title>LabManager - Asistente de Inventario (Pro)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
-  
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
+  <!-- Lector de Códigos de Barras y QR -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-    /* Ajustes para el escáner de cámara */
     #qr-reader, #qr-reader-form { width: 100%; border-radius: 0.5rem; overflow: hidden; border: 2px solid #bfdbfe; }
     #qr-reader__dashboard_section_csr span { color: #1e3a8a !important; font-weight: bold; }
-    
-    /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -30,16 +26,11 @@
   <div id="root"></div>
 
   <script type="text/babel" data-type="module">
-    // Importaciones de React desde la nube
     import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-    
-    // Importaciones OFICIALES de Firebase
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
     import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-    
-    // Íconos
     import * as LucideIcons from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
 
     const { 
@@ -47,12 +38,9 @@
       Camera, Keyboard, CheckCircle2, PackageSearch, MapPin, History,
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
-      Image: ImageIcon, Truck, Beaker, FileText, Download
+      Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload
     } = LucideIcons;
 
-    // =====================================================================
-    // CONFIGURACIÓN DE TU BASE DE DATOS DE FIREBASE
-    // =====================================================================
     const MIS_CREDENCIALES_FIREBASE = {
       apiKey: "AIzaSyDeaQnmO8nRG4stRrbnmONaz_k1EUWqVHc",
       authDomain: "asistente-de-inventario.firebaseapp.com",
@@ -67,11 +55,8 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    
-    // IMPORTANTE: Mantenemos el ID original para que no pierdas tu inventario anterior.
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'lab-manager-yahvi';
 
-    // --- CATEGORÍAS ESTABLECIDAS (CARPETAS) ---
     const CATEGORIES = [
       { id: 'equipos', name: 'Equipos y Aparatos Fijos', icon: '💻', color: 'bg-blue-100 text-blue-700' },
       { id: 'cristaleria', name: 'Cristalería y Plásticos', icon: '🧪', color: 'bg-cyan-100 text-cyan-700' },
@@ -81,7 +66,6 @@
       { id: 'consumibles', name: 'Consumibles Generales', icon: '📦', color: 'bg-amber-100 text-amber-700' }
     ];
 
-    // --- LISTA DE SUPERADMINISTRADORES ---
     const SUPER_ADMIN_EMAILS = [
       'yahvi.edsel.hernandez@gmail.com',
       'asistentelicam@gmail.com',
@@ -105,18 +89,21 @@
       const [showItemForm, setShowItemForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
       const [generatedQR, setGeneratedQR] = useState('');
+      const [imagePreview, setImagePreview] = useState(null); 
 
       const [scanInput, setScanInput] = useState('');
       const [scannedItem, setScannedItem] = useState(null);
       const [scanAction, setScanAction] = useState('info');
       const [scanAmount, setScanAmount] = useState(1);
+      const [scanReason, setScanReason] = useState('Protocolo rutinario');
       const [cameraActive, setCameraActive] = useState(false);
       const [cameraActiveForm, setCameraActiveForm] = useState(false);
+      const [viewMode, setViewMode] = useState('table');
       
       const scannerInputRef = useRef(null);
       const hiddenSubmitBtnRef = useRef(null);
 
-      // --- INICIALIZACIÓN ---
+      // --- INICIALIZACIÓN FIREBASE ---
       useEffect(() => {
         const initAuth = async () => {
           try {
@@ -133,348 +120,334 @@
             const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', user.uid);
             try {
                await setDoc(userRef, {
-                uid: user.uid,
-                email: user.email,
-                name: user.displayName || user.email.split('@')[0],
-                photoURL: user.photoURL || '',
-                lastLogin: new Date().toISOString(),
+                uid: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0],
+                photoURL: user.photoURL || '', lastLogin: new Date().toISOString(),
                 ...(SUPER_ADMIN_EMAILS.includes(user.email) ? { role: 'superadmin' } : {}) 
               }, { merge: true });
             } catch(e) {}
-          } else if (!user) {
-             setCurrentUserData(null);
-          }
+          } else if (!user) { setCurrentUserData(null); }
         });
         return () => unsubscribe();
       }, []);
 
       useEffect(() => {
-        if (!firebaseUser) {
-          setLoading(false);
-          return;
-        }
+        if (!firebaseUser) { setLoading(false); return; }
 
-        // 1. Escuchar Inventario (Regla de Firestore estricta)
         const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
         const unsubInv = onSnapshot(inventoryRef, (snapshot) => {
           setInventory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
           setLoading(false);
-        }, (error) => console.error(error));
+        });
 
-        // 2. Escuchar Usuarios
         const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'lab_users');
         const unsubUsers = onSnapshot(usersRef, (snapshot) => {
           const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setAllUsers(usersList);
-          
-          // Establecer datos del usuario actual
           const myData = usersList.find(u => u.uid === firebaseUser.uid);
           if (myData) {
              if (SUPER_ADMIN_EMAILS.includes(myData.email)) myData.role = 'superadmin';
-             // Si el rol no existe, asignar 'user' por defecto (solo consumir)
              if (!myData.role) myData.role = 'user'; 
              setCurrentUserData(myData);
           }
-        }, (error) => console.error(error));
+        });
 
-        // 3. Escuchar Historial de Movimientos
         const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
         const unsubLogs = onSnapshot(logsRef, (snapshot) => {
           const logsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setLogs(logsList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
-        }, (error) => console.error(error));
+        });
 
         return () => { unsubInv(); unsubUsers(); unsubLogs(); };
       }, [firebaseUser]);
 
-      // --- EFECTO DE LA CÁMARA PARA AUDITORÍA ---
+      // --- CAMARAS ---
       useEffect(() => {
         let html5QrcodeScanner;
         if (cameraActive && activeTab === 'scanner') {
-          html5QrcodeScanner = new Html5QrcodeScanner(
-            "qr-reader",
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            false
-          );
-          
+          html5QrcodeScanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
           html5QrcodeScanner.render((decodedText) => {
-            setScanInput(decodedText);
-            setCameraActive(false); 
-            html5QrcodeScanner.clear();
-            
-            setTimeout(() => {
-              if (hiddenSubmitBtnRef.current) hiddenSubmitBtnRef.current.click();
-            }, 150);
-          }, (error) => {});
+            setScanInput(decodedText); setCameraActive(false); html5QrcodeScanner.clear();
+            setTimeout(() => { if (hiddenSubmitBtnRef.current) hiddenSubmitBtnRef.current.click(); }, 150);
+          }, () => {});
         }
-
-        return () => {
-          if (html5QrcodeScanner) html5QrcodeScanner.clear().catch(e => {});
-        };
+        return () => { if (html5QrcodeScanner) html5QrcodeScanner.clear().catch(()=>{}); };
       }, [cameraActive, activeTab]);
 
-      // --- EFECTO DE LA CÁMARA PARA FORMULARIO ---
       useEffect(() => {
         let formScanner;
         if (cameraActiveForm && showItemForm) {
-          formScanner = new Html5QrcodeScanner(
-            "qr-reader-form",
-            { fps: 10, qrbox: { width: 250, height: 150 } },
-            false
-          );
+          formScanner = new Html5QrcodeScanner("qr-reader-form", { fps: 10, qrbox: { width: 250, height: 150 } }, false);
           formScanner.render((decodedText) => {
-            setGeneratedQR(decodedText); 
-            setCameraActiveForm(false);
-            formScanner.clear();
-          }, (error) => {});
+            setGeneratedQR(decodedText); setCameraActiveForm(false); formScanner.clear();
+          }, () => {});
         }
-        return () => {
-          if (formScanner) formScanner.clear().catch(e => {});
-        };
+        return () => { if (formScanner) formScanner.clear().catch(()=>{}); };
       }, [cameraActiveForm, showItemForm]);
 
-      // --- LÓGICA DERIVADA ---
-      const isAdmin = currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin';
+      // --- MANEJO DE IMÁGENES ---
+      useEffect(() => {
+        if (showItemForm && editingItem) {
+          setImagePreview(editingItem.imageUrl || null);
+        } else if (!showItemForm) {
+          setImagePreview(null);
+        }
+      }, [showItemForm, editingItem]);
 
-      const getExpiringSoonItems = () => {
-        const today = new Date();
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(today.getDate() + 30);
-        return inventory.filter(item => {
-          if (!item.expirationDate) return false;
-          const expDate = new Date(item.expirationDate);
-          return expDate <= thirtyDaysFromNow && expDate >= today;
-        }).sort((a, b) => new Date(a.expirationDate) - new Date(b.expirationDate));
+      const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 500; const MAX_HEIGHT = 500;
+            let width = img.width; let height = img.height;
+            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
+            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            setImagePreview(dataUrl);
+          }
+          img.src = event.target.result;
+        }
+        reader.readAsDataURL(file);
       };
 
-      const handleToggleOrderStatus = async (item) => {
-        if (!isAdmin) return alert("Solo los administradores pueden gestionar pedidos.");
-        const currentStatus = item.orderStatus || 'pending';
-        const newStatus = currentStatus === 'ordered' ? 'pending' : 'ordered';
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', item.id), { orderStatus: newStatus }, { merge: true });
-        } catch (e) { alert("Error actualizando estado."); }
+      // --- DERIVADOS ---
+      const isAdmin = currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin';
+      const lowStockItems = inventory.filter(item => item.qty < item.minThreshold);
+      const getExpiringSoonItems = () => {
+        const today = new Date(); const thirtyDays = new Date(); thirtyDays.setDate(today.getDate() + 30);
+        return inventory.filter(i => i.expirationDate && new Date(i.expirationDate) <= thirtyDays && new Date(i.expirationDate) >= today).sort((a,b) => new Date(a.expirationDate) - new Date(b.expirationDate));
+      };
+      const expiringItems = getExpiringSoonItems();
+
+      // --- FUNCIONES COMPRAS ---
+      const handleOrderStatusChange = async (item, newStatus) => {
+        if (!isAdmin) return alert("Solo administradores.");
+        let newQty = item.qty;
+        if (newStatus === 'received') {
+          const addAmount = (item.minThreshold * 2) - item.qty; 
+          newQty = item.qty + (addAmount > 0 ? addAmount : item.minThreshold);
+          newStatus = 'pending'; 
+          
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
+            itemId: item.id, itemName: item.name, action: 'add', amount: newQty - item.qty, reason: 'Recepción de Pedido',
+            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
+          });
+          alert(`¡Pedido recibido! Se han ingresado ${newQty - item.qty} ${item.unit} al inventario.`);
+        }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', item.id), { orderStatus: newStatus, qty: newQty }, { merge: true }); } catch (e) { alert("Error."); }
       };
 
       const handleSendPurchaseRequest = (item) => {
         const emailTo = "compras.directivo@laboratorio.com"; 
-        const subject = encodeURIComponent(`URGENTE: Requisición de Stock - ${item.name}`);
-        const body = encodeURIComponent(
-          `Hola,\n\nSe solicita la compra urgente del siguiente material.\n\n` +
-          `DETALLES DEL PRODUCTO:\n- Nombre: ${item.name}\n- Categoría: ${item.category}\n- Proyecto/Protocolo: ${item.project || 'N/A'}\n- Marca: ${item.brand || 'N/A'}\n- Proveedor: ${item.provider || 'N/A'}\n- Stock Actual: ${item.qty} ${item.unit} (Mínimo: ${item.minThreshold})\n\n` +
-          `Atentamente,\n${currentUserData.name} - LabManager`
-        );
+        const subject = encodeURIComponent(`Requisición LabManager - ${item.name}`);
+        const body = encodeURIComponent(`Solicitud de compra.\nProducto: ${item.name}\nCatálogo: ${item.catalogNum||'N/A'}\nStock: ${item.qty} ${item.unit}\nMin: ${item.minThreshold}\n\nGestión Automática LabManager.`);
         window.location.href = `mailto:${emailTo}?subject=${subject}&body=${body}`;
-        handleToggleOrderStatus(item); // Auto-marcar como ordenado
+        handleOrderStatusChange(item, 'ordered');
       };
 
-      // --- NUEVA FUNCIÓN: EXPORTAR A CSV (RESPALDO PARA DRIVE) ---
+      // --- FUNCIONES EXPORTAR (RESPALDO Y ETIQUETAS) ---
       const handleExportCSV = () => {
-        if (!isAdmin) return alert("Solo los administradores pueden exportar la base de datos.");
-        
-        // Crear las cabeceras del archivo Excel/CSV
-        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Proyecto', 'Proveedor', 'Marca', 'Cantidad', 'Unidad', 'Minimo_Requerido', 'Ubicacion', 'Fecha_Caducidad'];
-        
-        // Mapear los datos del inventario a filas
-        const rows = inventory.map(item => [
-          `"${item.barcode || item.id}"`,
-          `"${item.name}"`,
-          `"${item.category}"`,
-          `"${item.project || ''}"`,
-          `"${item.provider || ''}"`,
-          `"${item.brand || ''}"`,
-          item.qty,
-          `"${item.unit}"`,
-          item.minThreshold,
-          `"${item.location}"`,
-          `"${item.expirationDate || ''}"`
+        if (!isAdmin) return alert("Solo administradores.");
+        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Cantidad', 'Unidad', 'Minimo', 'Ubicacion', 'Caducidad', 'Observaciones'];
+        const rows = inventory.map(i => [
+          `"${i.barcode||i.id}"`, `"${i.name}"`, `"${i.category}"`, 
+          `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, `"${i.provider||''}"`, `"${i.brand||''}"`, 
+          i.qty, `"${i.unit}"`, i.minThreshold, `"${i.location}"`, `"${i.expirationDate||''}"`, `"${i.observations||''}"`
         ]);
-
-        // Unir cabeceras y filas con comas (formato CSV)
         const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
-        
-        // Crear un enlace invisible para forzar la descarga
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Respaldo_Inventario_LabManager_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `Respaldo_LabManager_${new Date().toLocaleDateString().replace(/\//g,'-')}.csv`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
-      // --- FUNCIONES DE LOGIN ---
+      // Función para imprimir una lista masiva (Catálogo minucioso)
+      const handlePrintAllLabels = () => {
+        const printWindow = window.open('', '_blank');
+        const itemsToPrint = selectedFolder ? inventory.filter(i => i.category === selectedFolder) : inventory;
+        
+        if (itemsToPrint.length === 0) return alert("No hay elementos para imprimir en esta vista.");
+
+        let labelsHtml = itemsToPrint.map(item => {
+          const code = item.barcode || item.id;
+          const name = item.name;
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(code)}`;
+          const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(code)}&scaleX=2&scaleY=1&includetext=true`;
+          
+          return `
+            <div class="label-box">
+              <div class="title">${name}</div>
+              <div class="codes">
+                 <img src="${qrUrl}" alt="QR" class="qr" />
+                 <img src="${barcodeUrl}" alt="Barcode" class="barcode" />
+              </div>
+              <div class="meta"><strong>Lote:</strong> ${item.lotNum || '--'} | <strong>Cat:</strong> ${item.catalogNum || '--'}</div>
+            </div>
+          `;
+        }).join('');
+
+        printWindow.document.write(`
+          <html><head><title>Catálogo General de Etiquetas</title><style>
+            body { font-family: sans-serif; margin: 0; padding: 20px; background: #fff;}
+            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7cm, 1fr)); gap: 15px; }
+            .label-box { border: 1px dashed #666; padding: 10px; display: flex; flex-direction: column; align-items: center; text-align: center; border-radius: 4px;}
+            .title { font-size: 12px; font-weight: bold; margin-bottom: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .codes { display: flex; gap: 10px; align-items: center; justify-content: center; width: 100%;}
+            .qr { width: 50px; height: 50px; }
+            .barcode { height: 40px; max-width: 120px; object-fit: contain; }
+            .meta { font-size: 10px; color: #333; margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; width: 100%;}
+            @media print { 
+              body { padding: 0; } 
+              .label-box { page-break-inside: avoid; border: 1px solid #000; }
+            }
+          </style></head><body>
+            <h2 style="text-align:center; margin-bottom: 20px;">Catálogo General de Etiquetas</h2>
+            <div class="grid">${labelsHtml}</div>
+            <script>
+              setTimeout(() => { window.print(); }, 2000); 
+            <\/script>
+          </body></html>
+        `);
+        printWindow.document.close();
+      };
+
+      // --- FUNCIONES LOGIN ---
       const handleGoogleLogin = async () => {
         const hostname = window.location.hostname || '';
-        // Protegemos el entorno de vista previa / iframes para evitar que Firebase devuelva 'auth/unauthorized-domain'
-        if (hostname.includes('googleusercontent.com') || hostname.includes('csb.app') || window.self !== window.top) {
-          setAuthErrorDomain(true);
-          return;
-        }
-        
-        const provider = new GoogleAuthProvider();
-        try {
-          setLoading(true);
-          await signInWithPopup(auth, provider);
-        } catch (error) {
-          setAuthErrorDomain(true);
-          setLoading(false);
-        }
+        if (hostname.includes('googleusercontent.com') || hostname.includes('csb.app') || window.self !== window.top) return setAuthErrorDomain(true);
+        try { setLoading(true); await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { setAuthErrorDomain(true); setLoading(false); }
       };
-
       const handleSimulatedLogin = async () => {
         setLoading(true);
         try {
           let currentUid = auth.currentUser?.uid;
-          if (!currentUid) {
-            const cred = await signInAnonymously(auth);
-            currentUid = cred.user.uid;
-          }
+          if (!currentUid) { const cred = await signInAnonymously(auth); currentUid = cred.user.uid; }
           const role = SUPER_ADMIN_EMAILS.includes(mockEmail) ? 'superadmin' : 'user';
-          const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', currentUid);
-          const simulatedData = {
-              uid: currentUid, email: mockEmail, name: mockEmail.split('@')[0], photoURL: '', lastLogin: new Date().toISOString(), role: role
-          };
-          await setDoc(userRef, simulatedData, { merge: true });
-          setCurrentUserData(simulatedData);
-        } catch(e) { alert("Error: " + e.message); }
-        setLoading(false);
+          const simData = { uid: currentUid, email: mockEmail, name: mockEmail.split('@')[0], photoURL: '', lastLogin: new Date().toISOString(), role };
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', currentUid), simData, { merge: true });
+          setCurrentUserData(simData);
+        } catch(e) {} setLoading(false);
       };
-
       const handleLogout = () => { auth.signOut(); setActiveTab('dashboard'); setCurrentUserData(null); setAuthErrorDomain(false); };
-
       const handleUpdateUserRole = async (userId, newRole) => {
         if (currentUserData.role !== 'superadmin') return;
         try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', userId), { role: newRole }, { merge: true }); } catch(e) {}
       };
 
-      // --- FORMULARIO Y CRUD INVENTARIO ---
+      // --- CRUD ---
       const generateUniqueQR = () => {
         let code = ''; let isUnique = false;
         while (!isUnique) {
-          const timePart = Date.now().toString(36).toUpperCase();
-          const randPart = Math.random().toString(36).substr(2, 4).toUpperCase();
-          code = `LAB-${timePart}-${randPart}`;
-          if (!inventory.some(item => item.barcode === code)) isUnique = true;
+          code = `LAB-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substr(2,4).toUpperCase()}`;
+          if (!inventory.some(i => i.barcode === code)) isUnique = true;
         }
-        setGeneratedQR(code); 
-        return code;
+        setGeneratedQR(code); return code;
       };
-
-      const handlePrintLabel = (itemData, generatedCodeFallback = null) => {
-        const barcodeToPrint = itemData?.barcode || generatedCodeFallback;
-        const nameToPrint = itemData?.name || 'Elemento de Laboratorio';
-        if (!barcodeToPrint) return alert("Primero debes generar o escanear un código.");
-
+      
+      const handlePrintLabel = (itemData, fallback = null) => {
+        const code = itemData?.barcode || fallback; const name = itemData?.name || 'LabManager';
+        if (!code) return alert("Genera o escanea un código primero.");
         const printWindow = window.open('', '_blank');
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(barcodeToPrint)}`;
-        
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(code)}`;
+        const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(code)}&scaleX=2&scaleY=1&includetext=true`;
+
         printWindow.document.write(`
           <html><head><title>Imprimir</title><style>
-            body { margin: 0; display: flex; justify-content: center; align-items: center; padding-top: 20px; font-family: sans-serif; }
-            .label { width: 5cm; height: 3.5cm; border: 1px dashed #000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0.2cm; box-sizing: border-box; }
-            .title { font-size: 10px; font-weight: bold; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100%; margin-bottom: 4px; }
-            img { width: 1.8cm; height: 1.8cm; }
-            .id { font-family: monospace; font-size: 11px; margin-top: 4px; font-weight: bold; }
-            @media print { @page { margin: 0; } body { padding: 0; } .label { border: none; } }
+            body{margin:0;display:flex;justify-content:center;align-items:center;padding-top:20px;font-family:sans-serif;} 
+            .label{width:6.5cm;height:4.5cm;border:1px dashed #000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0.2cm;box-sizing:border-box;} 
+            .title{font-size:11px;font-weight:bold;text-align:center;overflow:hidden;white-space:nowrap;max-width:100%;margin-bottom:6px;} 
+            .codes { display: flex; gap: 10px; align-items: center; justify-content: center; width: 100%;}
+            .qr{width:1.8cm;height:1.8cm;} 
+            .barcode{height:1.2cm; max-width: 3.5cm; object-fit: contain;}
+            @media print{@page{margin:0;} body{padding:0;} .label{border:none;}}
           </style></head><body>
-            <div class="label"><div class="title">${nameToPrint}</div><img src="${qrUrl}" alt="QR" onload="window.print(); window.close();" onerror="window.close();" /><div class="id">${barcodeToPrint}</div></div>
+            <div class="label">
+              <div class="title">${name}</div>
+              <div class="codes">
+                <img src="${qrUrl}" alt="QR"/>
+                <img src="${barcodeUrl}" alt="Barcode"/>
+              </div>
+            </div>
+            <script>setTimeout(() => { window.print(); window.close(); }, 1500);<\/script>
           </body></html>
         `);
         printWindow.document.close();
       };
 
       const handleSaveItem = async (e) => {
-        e.preventDefault();
-        if (!isAdmin) return alert("No tienes permisos para crear o modificar elementos.");
-        const formData = new FormData(e.target);
-        const itemData = Object.fromEntries(formData.entries());
+        e.preventDefault(); if (!isAdmin) return alert("Sin permisos.");
+        const formData = new FormData(e.target); const itemData = Object.fromEntries(formData.entries());
         
         itemData.qty = Number(itemData.qty); 
         itemData.minThreshold = Number(itemData.minThreshold);
-        if(generatedQR && !itemData.barcode) itemData.barcode = generatedQR;
-        if(!itemData.orderStatus) itemData.orderStatus = 'pending';
+        if (generatedQR && !itemData.barcode) itemData.barcode = generatedQR;
+        if (!itemData.orderStatus) itemData.orderStatus = 'pending';
+        itemData.imageUrl = imagePreview || editingItem?.imageUrl || '';
 
         const docId = editingItem ? editingItem.id : `item_${Date.now()}`;
-        
         try {
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', docId), itemData, { merge: true });
-          
-          // Registrar en historial si es creación
           if (!editingItem) {
-            const logId = `log_${Date.now()}`;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), {
-              itemId: docId, itemName: itemData.name, action: 'create', amount: itemData.qty,
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
+              itemId: docId, itemName: itemData.name, action: 'create', amount: itemData.qty, reason: 'Registro inicial',
               userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
             });
           }
-
-          setShowItemForm(false); setEditingItem(null); setGeneratedQR('');
+          setShowItemForm(false); setEditingItem(null); setGeneratedQR(''); setImagePreview(null);
         } catch (err) { alert("Error: " + err.message); }
       };
 
       const handleDeleteItem = async (id, name) => {
-        if (!isAdmin) return alert("Sin permisos.");
-        if (window.confirm("¿Seguro que deseas eliminar este elemento?")) {
+        if (!isAdmin) return;
+        if (window.confirm("¿Seguro que deseas eliminar esto?")) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id));
-          
-          // Registrar eliminación
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
-            itemId: id, itemName: name, action: 'delete', amount: 0,
+            itemId: id, itemName: name, action: 'delete', amount: 0, reason: 'Eliminación del sistema',
             userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
           });
         }
       };
 
-      // --- ESCÁNER Y AUDITORÍA ---
+      // --- ESCANER ---
       const handleBarcodeSubmit = (e) => {
-        if(e) e.preventDefault();
-        if (!scanInput.trim()) return;
-        const foundItem = inventory.find(item => item.barcode === scanInput.trim() || item.id === scanInput.trim());
-        if (foundItem) { 
-          setScannedItem(foundItem); 
-          setScanAmount(1); 
-        } else { 
-          alert(`El código "${scanInput}" no se encuentra registrado.`); 
-          setScannedItem(null); 
-        }
+        if(e) e.preventDefault(); if (!scanInput.trim()) return;
+        const searchVal = scanInput.trim().toLowerCase();
+        const foundItem = inventory.find(i => 
+          i.barcode?.toLowerCase() === searchVal || 
+          i.id?.toLowerCase() === searchVal || 
+          i.catalogNum?.toLowerCase() === searchVal || 
+          i.lotNum?.toLowerCase() === searchVal
+        );
+
+        if (foundItem) { setScannedItem(foundItem); setScanAmount(1); setScanReason('Protocolo rutinario'); } 
+        else { alert(`Código, Catálogo o Lote no encontrado.`); setScannedItem(null); }
         setScanInput(''); 
       };
 
       const executeScanAction = async () => {
         if (!scannedItem) return;
-
-        // Reglas de Negocio (Permisos)
-        if (scanAction === 'add' && !isAdmin) {
-          alert("Seguridad: No tienes permisos para INGRESAR stock (Solo administradores). Tú solo puedes consumir o auditar.");
-          return;
-        }
-
+        if (scanAction === 'add' && !isAdmin) return alert("Solo administradores pueden ingresar stock.");
         const newQty = scanAction === 'add' ? scannedItem.qty + scanAmount : scannedItem.qty - scanAmount;
-        if (newQty < 0) return alert("El stock no puede ser negativo.");
+        if (newQty < 0) return alert("Stock negativo no permitido.");
 
         try {
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', scannedItem.id), { qty: newQty }, { merge: true });
-
-          // Trazabilidad (LabWare/Labguru style)
-          const logId = `log_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId), {
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}_${Math.floor(Math.random()*1000)}`), {
             itemId: scannedItem.id, itemName: scannedItem.name, action: scanAction, amount: scanAmount,
-            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString(),
-            project: scannedItem.project || 'Uso General'
+            reason: scanAction === 'add' ? 'Reabastecimiento manual' : scanReason,
+            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
           });
-
           setScannedItem({ ...scannedItem, qty: newQty });
           setScanAction('info');
-          
           const btn = document.getElementById('btn-action-success');
-          if(btn) {
-            const originalText = btn.innerHTML; 
-            btn.innerHTML = '¡Actualizado!'; btn.classList.add('bg-green-600');
-            setTimeout(() => { btn.innerHTML = originalText; btn.classList.remove('bg-green-600'); }, 2000);
-          }
-        } catch (e) { alert("Error de red."); }
+          if(btn) { btn.innerHTML = '¡Auditoría Exitosa!'; btn.classList.add('bg-green-600'); setTimeout(() => { btn.innerHTML = 'Confirmar'; btn.classList.remove('bg-green-600'); }, 2000); }
+        } catch (e) { alert("Error."); }
       };
 
       // --- RENDERIZADO LOGIN ---
@@ -483,21 +456,20 @@
           <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 animate-fade-in flex flex-col items-center text-center">
               <div className="bg-blue-600 p-4 rounded-2xl text-white mb-6 shadow-[0_0_20px_rgba(37,99,235,0.4)]"><Boxes size={48} /></div>
-              <h1 className="text-3xl font-extrabold text-gray-800 mb-2 tracking-tight">LabManager Pro</h1>
-              <p className="text-gray-500 font-medium mb-8">Asistente de Inventario y Trazabilidad</p>
-              
+              <h1 className="text-3xl font-extrabold text-gray-800 mb-2">LabManager Pro</h1>
+              <p className="text-gray-500 font-medium mb-8">Asistente de Inventario de Laboratorio</p>
               {loading ? <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-8"></div> : (
                 <div className="w-full space-y-4">
                   {!authErrorDomain ? (
-                    <button onClick={handleGoogleLogin} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 shadow-sm transition-all hover:shadow-md">
+                    <button onClick={handleGoogleLogin} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3">
                       <svg className="w-6 h-6" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
                       Continuar con Google
                     </button>
                   ) : (
                     <div className="bg-orange-50 p-6 rounded-xl border border-orange-200 text-left">
-                      <p className="text-sm text-orange-800 mb-4 font-medium"><AlertTriangle size={16} className="inline mr-1 -mt-1"/> Entorno protegido detectado. Para probar la app, utiliza el acceso simulado:</p>
+                      <p className="text-sm text-orange-800 mb-4 font-medium">Entorno protegido. Simula acceso para probar:</p>
                       <input type="email" value={mockEmail} onChange={(e) => setMockEmail(e.target.value)} className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none mb-3" />
-                      <button onClick={handleSimulatedLogin} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition-all">Ingresar al Sistema</button>
+                      <button onClick={handleSimulatedLogin} className="w-full bg-orange-600 text-white font-bold py-3 px-4 rounded-xl shadow-md">Ingresar al Sistema</button>
                     </div>
                   )}
                 </div>
@@ -507,167 +479,153 @@
         );
       }
 
-      const lowStockItems = inventory.filter(item => item.qty < item.minThreshold);
-      const expiringItems = getExpiringSoonItems();
-
       return (
         <div className="flex h-screen bg-slate-50 font-sans text-gray-900">
-          {/* SIDEBAR DESKTOP */}
+          {/* SIDEBAR */}
           <aside className="w-72 bg-slate-900 text-slate-300 flex-col hidden md:flex shadow-2xl z-20">
-            <div className="p-6 border-b border-slate-800">
-              <div className="flex items-center gap-3 text-white">
-                <div className="bg-blue-600 p-2 rounded-lg shadow-[0_0_15px_rgba(37,99,235,0.5)]"><Boxes size={24} /></div>
-                <div><h1 className="font-bold text-xl tracking-tight">LabManager Pro</h1></div>
-              </div>
+            <div className="p-6 border-b border-slate-800 flex items-center gap-3 text-white">
+              <div className="bg-blue-600 p-2 rounded-lg shadow-[0_0_15px_rgba(37,99,235,0.5)]"><Boxes size={24} /></div>
+              <h1 className="font-bold text-xl">LabManager Pro</h1>
             </div>
             
-            <nav className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
-              <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Panel Central</button>
-              <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><Folder size={20} /> Catálogo e Inventario</button>
-              <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'scanner' ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><ScanLine size={20} /> Auditoría / Escáner</button>
+            <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
+              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-2">Navegación</p>
+              <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Dashboard General</button>
+              <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><Folder size={20} /> Catálogo de Inventario</button>
+              <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'scanner' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><ScanLine size={20} /> Escáner de Uso</button>
               
-              {/* Vistas Administrativas */}
-              <div className="pt-4 mt-4 border-t border-slate-800">
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Administración</p>
-                <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-slate-800 text-white shadow-inner border border-slate-700' : 'hover:bg-slate-800 text-slate-400'}`}><History size={20} /> Historial (LIMS)</button>
-                {currentUserData?.role === 'superadmin' && (
-                  <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-2 transition-all ${activeTab === 'users' ? 'bg-purple-600 text-white shadow-md' : 'hover:bg-slate-800 text-purple-400'}`}><Users size={20} /> Control de Accesos</button>
-                )}
-              </div>
+              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Módulos Especializados</p>
+              <button onClick={() => setActiveTab('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'orders' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><CreditCard size={20} /> Compras y Pedidos</button>
+
+              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
+              <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white border border-slate-600' : 'hover:bg-slate-800'}`}><ClipboardSignature size={20} /> Historial Operativo</button>
+              {currentUserData?.role === 'superadmin' && (
+                <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-1 transition-all ${activeTab === 'users' ? 'bg-purple-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} /> Control Accesos</button>
+              )}
             </nav>
 
             <div className="p-4 bg-slate-950">
-              <div className="flex items-center gap-3 mb-3 bg-slate-800 p-3 rounded-xl border border-slate-700">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white shadow-inner flex-shrink-0">
-                  {currentUserData.photoURL ? <img src={currentUserData.photoURL} className="w-full h-full rounded-full"/> : currentUserData.name.charAt(0).toUpperCase()}
+              <div className="flex items-center gap-3 mb-3 bg-slate-800 p-3 rounded-xl">
+                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white overflow-hidden">
+                  {currentUserData.photoURL ? <img src={currentUserData.photoURL} /> : currentUserData.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="overflow-hidden">
                   <p className="text-white font-bold truncate text-sm">{currentUserData.name}</p>
-                  <p className={`text-[10px] uppercase font-extrabold tracking-wider ${isAdmin ? 'text-purple-400' : 'text-emerald-400'}`}>
-                    {currentUserData.role === 'superadmin' ? 'Propietario' : currentUserData.role === 'admin' ? 'Administrador' : 'Técnico / Usuario'}
-                  </p>
+                  <p className={`text-[10px] uppercase font-bold tracking-wider ${isAdmin ? 'text-purple-400' : 'text-emerald-400'}`}>{currentUserData.role}</p>
                 </div>
               </div>
-              <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-red-400 hover:text-white hover:bg-red-600/20 rounded-lg transition-colors"><LogOut size={16} /> Cerrar Sesión</button>
+              <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-red-400 hover:bg-red-600/20 rounded-lg"><LogOut size={16} /> Salir</button>
             </div>
           </aside>
 
-          {/* HEADER MOBILE */}
-          <main className="flex-1 flex flex-col overflow-hidden">
+          {/* MAIN CONTENT */}
+          <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
             <header className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md z-10">
               <span className="font-bold flex items-center gap-2"><Boxes size={24} className="text-blue-500" /> LabManager</span>
               <div className="flex gap-4">
-                <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''}><LayoutDashboard size={24}/></button>
-                <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null);}} className={activeTab === 'inventory' ? 'text-blue-400' : ''}><Folder size={24}/></button>
-                <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''}><ScanLine size={24}/></button>
+                <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''}><LayoutDashboard/></button>
+                <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-400' : ''}><Folder/></button>
+                <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''}><ScanLine/></button>
               </div>
             </header>
 
-            {/* AREA DE CONTENIDO */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 relative bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 relative">
               
-              {/* === VISTA 1: DASHBOARD (Inspirado en Quartzy) === */}
+              {/* --- DASHBOARD --- */}
               {activeTab === 'dashboard' && (
-                <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-                  <div className="flex justify-between items-end mb-8">
-                    <div>
-                      <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Hola, {currentUserData.name.split(' ')[0]}</h2>
-                      <p className="text-gray-500 mt-1 font-medium">Resumen del estado del laboratorio</p>
-                    </div>
+                <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
+                  <div>
+                    <h2 className="text-3xl font-extrabold text-gray-900">Hola, {currentUserData.name.split(' ')[0]}</h2>
+                    <p className="text-gray-500 mt-1">Panel General de Laboratorio</p>
                   </div>
-                  
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-5 hover:shadow-md transition-shadow cursor-pointer" onClick={() => {setActiveTab('inventory'); setSelectedFolder(null);}}>
-                      <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Boxes size={32} /></div>
-                      <div><p className="text-sm text-gray-500 font-bold uppercase tracking-wider">Total Elementos</p><p className="text-4xl font-black text-gray-800">{inventory.length}</p></div>
+                    <div onClick={() => setActiveTab('inventory')} className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md">
+                      <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Boxes size={32}/></div>
+                      <div><p className="text-sm text-gray-500 font-bold uppercase">Elementos</p><p className="text-4xl font-black text-gray-800">{inventory.length}</p></div>
                     </div>
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveTab('inventory')}>
-                      <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><AlertTriangle size={32} /></div>
-                      <div><p className="text-sm text-gray-500 font-bold uppercase tracking-wider">Bajo Stock</p><p className="text-4xl font-black text-red-600">{lowStockItems.length}</p></div>
+                    <div onClick={() => setActiveTab('orders')} className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md">
+                      <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><AlertTriangle size={32}/></div>
+                      <div><p className="text-sm text-gray-500 font-bold uppercase">Bajo Stock</p><p className="text-4xl font-black text-red-600">{lowStockItems.length}</p></div>
                     </div>
-                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-5">
-                      <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><Calendar size={32} /></div>
-                      <div><p className="text-sm text-gray-500 font-bold uppercase tracking-wider">Caducan Pronto</p><p className="text-4xl font-black text-orange-600">{expiringItems.length}</p></div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Panel de Compras (Quartzy Style) */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col h-96">
-                      <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <ShoppingCart className="text-blue-600" size={24} /> Centro de Compras y Pedidos
-                      </h3>
-                      <div className="flex-1 overflow-y-auto pr-2 divide-y divide-gray-100">
-                        {lowStockItems.length === 0 ? (
-                          <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-3"><CheckCircle2 size={48} className="text-green-400"/><p>Inventario saludable. No hay pedidos urgentes.</p></div>
-                        ) : null}
-                        
-                        {lowStockItems.map(item => {
-                          const isOrdered = item.orderStatus === 'ordered';
-                          return (
-                            <div key={item.id} className={`py-4 flex justify-between items-center transition-colors ${isOrdered ? 'opacity-60' : ''}`}>
-                              <div className="flex-1">
-                                <p className="font-bold text-gray-900 flex items-center gap-2">
-                                  {item.name} {isOrdered && <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold"><Truck size={10} className="inline mr-1"/>Pedido</span>}
-                                </p>
-                                <p className="text-xs text-gray-500 font-medium">Prov: {item.provider || 'N/A'} | Proy: {item.project || 'General'}</p>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <div className="text-right">
-                                  <p className="font-bold text-red-600">{item.qty} {item.unit}</p>
-                                  <p className="text-[10px] text-gray-400 uppercase font-bold">Mín: {item.minThreshold}</p>
-                                </div>
-                                {isAdmin ? (
-                                  <div className="flex gap-1 bg-gray-50 rounded-lg p-1 border">
-                                    <button onClick={() => handleSendPurchaseRequest(item)} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Solicitar por Correo"><Mail size={18} /></button>
-                                    <button onClick={() => handleToggleOrderStatus(item)} className={`p-2 rounded-md transition-colors ${isOrdered ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`} title={isOrdered ? 'Desmarcar Pedido' : 'Marcar como Pedido'}><Truck size={18} /></button>
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-gray-400 font-medium bg-gray-100 px-2 py-1 rounded">Solo Admin</span>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Panel de Caducidades */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 flex flex-col h-96">
-                      <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <Calendar className="text-orange-500" size={24} /> Lotes por Vencer (30 días)
-                      </h3>
-                      <div className="flex-1 overflow-y-auto pr-2 divide-y divide-gray-100">
-                        {expiringItems.length === 0 ? (
-                           <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-3"><ShieldCheck size={48} className="text-green-400"/><p>No hay reactivos próximos a caducar.</p></div>
-                        ) : null}
-                        {expiringItems.map(item => (
-                          <div key={item.id} className="py-4 flex justify-between items-center">
-                            <div>
-                              <p className="font-bold text-gray-900">{item.name}</p>
-                              <p className="text-xs text-gray-500 font-medium flex items-center gap-1"><MapPin size={12}/> {item.location}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-orange-600 text-lg">{item.expirationDate}</p>
-                              <p className="text-[10px] font-bold bg-orange-100 text-orange-800 px-2 py-0.5 rounded uppercase tracking-wide mt-1 inline-block">Prioridad Uso</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    <div className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5">
+                      <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><Calendar size={32}/></div>
+                      <div><p className="text-sm text-gray-500 font-bold uppercase">Caducan Pronto</p><p className="text-4xl font-black text-orange-600">{expiringItems.length}</p></div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* === VISTA 2: CARPETAS (LabCollector Style) === */}
+              {/* --- MÓDULO COMPRAS --- */}
+              {activeTab === 'orders' && (
+                <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-indigo-600 p-3 rounded-xl text-white shadow-lg"><CreditCard size={28}/></div>
+                    <div>
+                      <h2 className="text-3xl font-black text-gray-900">Módulo de Compras</h2>
+                      <p className="text-gray-500">Solicita, rastrea y reabastece automáticamente tu inventario.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 min-h-[500px]">
+                    {lowStockItems.length === 0 && inventory.filter(i => i.orderStatus === 'ordered').length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-64 text-gray-400"><CheckCircle2 size={64} className="text-green-400 mb-4"/><p className="text-xl font-bold">Todo está bajo control.</p><p>No hay reactivos por debajo del límite mínimo.</p></div>
+                    ) : (
+                      <div className="space-y-4">
+                        {lowStockItems.filter(i => i.orderStatus !== 'ordered').map(item => (
+                          <div key={item.id} className="flex justify-between items-center p-5 bg-red-50 border border-red-100 rounded-2xl">
+                            <div className="flex gap-4 items-center">
+                              <AlertTriangle className="text-red-500" size={24}/>
+                              <div>
+                                <h3 className="font-bold text-gray-900 text-lg">{item.name}</h3>
+                                <p className="text-sm text-gray-600">Stock: <strong className="text-red-600">{item.qty} {item.unit}</strong> (Mínimo: {item.minThreshold}) | Prov: {item.provider || 'N/A'} | Cat: {item.catalogNum || 'N/A'}</p>
+                              </div>
+                            </div>
+                            {isAdmin && (
+                              <div className="flex gap-2">
+                                <button onClick={() => handleSendPurchaseRequest(item)} className="px-4 py-2 bg-white text-gray-700 font-bold rounded-lg border shadow-sm hover:bg-gray-50 flex items-center gap-2"><Mail size={16}/> Solicitar Cotización</button>
+                                <button onClick={() => handleOrderStatusChange(item, 'ordered')} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg shadow-sm hover:bg-indigo-700 flex items-center gap-2"><Truck size={16}/> Marcar 'En Camino'</button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {inventory.filter(i => i.orderStatus === 'ordered').map(item => (
+                          <div key={item.id} className="flex justify-between items-center p-5 bg-indigo-50 border border-indigo-100 rounded-2xl opacity-80 hover:opacity-100 transition-opacity">
+                            <div className="flex gap-4 items-center">
+                              <div className="p-2 bg-indigo-200 text-indigo-700 rounded-full animate-bounce"><Truck size={20}/></div>
+                              <div>
+                                <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">{item.name} <span className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded uppercase tracking-wider">Pedido Enviado</span></h3>
+                                <p className="text-sm text-gray-600">Esperando recepción (Stock actual: {item.qty} {item.unit})</p>
+                              </div>
+                            </div>
+                            {isAdmin && (
+                              <div className="flex gap-2">
+                                <button onClick={() => handleOrderStatusChange(item, 'pending')} className="px-4 py-2 text-gray-500 hover:text-red-500 font-bold rounded-lg"><X size={20}/></button>
+                                <button onClick={() => handleOrderStatusChange(item, 'received')} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg shadow-sm hover:bg-green-500 flex items-center gap-2"><CheckSquare size={16}/> ¡Recibido! (Sumar Stock)</button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* --- MÓDULO INVENTARIO Y CATALOGO --- */}
               {activeTab === 'inventory' && !showItemForm && !selectedFolder && (
                 <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
                   <div className="flex justify-between items-center mb-8">
                     <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Catálogo de Inventario</h2>
                     {isAdmin && (
-                      <button onClick={handleExportCSV} className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
-                        <Download size={18}/> Exportar a Excel (Drive)
-                      </button>
+                      <div className="flex gap-3">
+                        <button onClick={handlePrintAllLabels} className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
+                          <Printer size={18}/> Imprimir Catálogo de Etiquetas
+                        </button>
+                        <button onClick={handleExportCSV} className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
+                          <Download size={18}/> Respaldar a Excel
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -682,7 +640,7 @@
                             {alerts > 0 && <span className="bg-red-100 text-red-700 text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm"><AlertTriangle size={14}/> {alerts} alertas</span>}
                           </div>
                           <h3 className="text-xl font-bold text-gray-800 mb-1">{folder.name}</h3>
-                          <p className="text-gray-500 font-medium">{items.length} productos registrados</p>
+                          <p className="text-gray-500 font-medium">{items.length} productos</p>
                         </div>
                        )
                     })}
@@ -690,86 +648,97 @@
                 </div>
               )}
 
-              {/* === VISTA 3: LISTA DE INVENTARIO VISUAL (Sortly Style) === */}
+              {/* LISTA DE ITEMS DENTRO DE CARPETA */}
               {activeTab === 'inventory' && !showItemForm && selectedFolder && (
-                 <div className="space-y-6 animate-fade-in max-w-7xl mx-auto flex flex-col h-full">
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-                      <h2 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3 tracking-tight">
+                 <div className="space-y-4 animate-fade-in max-w-7xl mx-auto flex flex-col h-full">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
+                      <h2 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
                         <button onClick={()=>setSelectedFolder(null)} className="hover:bg-gray-200 p-2 rounded-full transition-colors"><ArrowLeft size={24}/></button> 
                         {selectedFolder}
                       </h2>
                       <div className="flex items-center gap-3">
+                        <div className="flex bg-white rounded-xl border p-1 shadow-sm">
+                          <button onClick={()=>setViewMode('table')} className={`p-2 rounded-lg ${viewMode==='table' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`} title="Vista de Lista"><List size={20}/></button>
+                          <button onClick={()=>setViewMode('grid')} className={`p-2 rounded-lg ${viewMode==='grid' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`} title="Vista Galería"><LayoutGrid size={20}/></button>
+                        </div>
                         {isAdmin && (
-                          <>
-                            <button onClick={handleExportCSV} className="bg-green-100 hover:bg-green-200 text-green-700 font-bold px-4 py-3 rounded-xl flex items-center gap-2 shadow-sm transition-colors">
-                              <Download size={20}/> Exportar
-                            </button>
-                            <button onClick={()=>{setEditingItem(null); setGeneratedQR(''); setShowItemForm(true);}} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg transition-transform hover:-translate-y-1">
-                              <Plus size={20}/> Registrar Nuevo
-                            </button>
-                          </>
+                          <button onClick={()=>{setEditingItem(null); setGeneratedQR(''); setShowItemForm(true);}} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg transition-transform hover:-translate-y-1">
+                            <Plus size={20}/> Registrar Nuevo
+                          </button>
                         )}
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
-                       <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
-                         <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm flex-1 flex items-center gap-2">
-                           <Search className="text-gray-400 ml-2" size={20} />
-                           <input type="text" placeholder="Buscar por nombre, código, proyecto o marca..." className="w-full bg-transparent border-none focus:outline-none text-gray-700 font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                         </div>
-                       </div>
-                       
-                       <div className="overflow-x-auto flex-1">
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-3 mb-2 flex items-center gap-2">
+                       <Search className="text-gray-400 ml-2" size={20} />
+                       <input type="text" placeholder="Buscar por nombre, ID, lote, catálogo o marca..." className="w-full bg-transparent border-none focus:outline-none text-gray-700 font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                    </div>
+
+                    {/* VISTA DE GRID */}
+                    {viewMode === 'grid' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 overflow-y-auto pb-10">
+                        {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || i.lotNum?.includes(searchQuery) || i.catalogNum?.includes(searchQuery))).map(item => {
+                          const isLow = item.qty < item.minThreshold;
+                          return (
+                            <div key={item.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-xl transition-shadow flex flex-col">
+                              <div className="h-40 bg-gray-100 relative">
+                                {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon size={48}/></div>}
+                                {isLow && <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-md">¡Reponer!</span>}
+                              </div>
+                              <div className="p-4 flex-1 flex flex-col">
+                                <h3 className="font-bold text-gray-900 text-lg mb-1 line-clamp-2">{item.name}</h3>
+                                <p className="text-xs text-gray-500 font-mono mb-1"><QrCode size={12} className="inline mr-1"/>{item.barcode}</p>
+                                <p className="text-xs text-gray-500 mb-3">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
+                                <div className="mt-auto pt-3 border-t border-gray-100 flex justify-between items-end">
+                                  <div>
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Stock</p>
+                                    <p className={`text-2xl font-black ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty} <span className="text-sm font-medium text-gray-500">{item.unit}</span></p>
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><ScanLine size={18}/></button>
+                                    {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode||''); setShowItemForm(true);}} className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-200"><Settings size={18}/></button>}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* VISTA DE TABLA */}
+                    {viewMode === 'table' && (
+                       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-x-auto">
                          <table className="w-full text-left whitespace-nowrap">
-                           <thead className="bg-gray-50/80 sticky top-0 backdrop-blur-sm z-10 border-b border-gray-200">
-                             <tr>
-                               <th className="p-4 text-xs uppercase tracking-wider font-bold text-gray-500">Producto</th>
-                               <th className="p-4 text-xs uppercase tracking-wider font-bold text-gray-500">Trazabilidad (Benchling)</th>
-                               <th className="p-4 text-xs uppercase tracking-wider font-bold text-gray-500">Ubicación</th>
-                               <th className="p-4 text-xs uppercase tracking-wider font-bold text-gray-500 text-right">Stock</th>
-                               <th className="p-4 text-xs uppercase tracking-wider font-bold text-gray-500 text-center">Acciones</th>
-                             </tr>
+                           <thead className="bg-gray-50/80 sticky top-0 border-b border-gray-200">
+                             <tr><th className="p-4 text-xs uppercase font-bold text-gray-500">Producto</th><th className="p-4 text-xs uppercase font-bold text-gray-500">Detalles</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-right">Stock</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-center">Acciones</th></tr>
                            </thead>
                            <tbody className="divide-y divide-gray-100">
-                             {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || (i.brand && i.brand.toLowerCase().includes(searchQuery.toLowerCase())) || (i.project && i.project.toLowerCase().includes(searchQuery.toLowerCase())))).map(item => {
+                             {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || i.lotNum?.includes(searchQuery) || i.catalogNum?.includes(searchQuery))).map(item => {
                                const isLow = item.qty < item.minThreshold;
                                return (
-                                 <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
+                                 <tr key={item.id} className="hover:bg-blue-50/30">
                                    <td className="p-4 flex items-center gap-4 min-w-[250px]">
-                                     {/* Thumbnail Sortly Style */}
-                                     <div className="w-12 h-12 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                     <div className="w-12 h-12 rounded bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                                        {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover"/> : <ImageIcon className="text-gray-400" size={20}/>}
                                      </div>
                                      <div>
-                                       <p className="font-bold text-gray-900 text-base">{item.name}</p>
-                                       <div className="mt-1 flex items-center gap-1 text-xs text-gray-500 font-mono bg-gray-100 px-2 py-0.5 rounded inline-flex"><QrCode size={12}/> {item.barcode}</div>
+                                       <p className="font-bold text-gray-900">{item.name}</p>
+                                       <p className="text-xs text-gray-500 font-mono"><QrCode size={12} className="inline mr-1"/>{item.barcode}</p>
                                      </div>
                                    </td>
-                                   <td className="p-4 text-xs text-gray-600 min-w-[200px]">
-                                     <p className="font-medium text-blue-700 flex items-center gap-1"><FileText size={12}/> Proy: {item.project || 'General'}</p>
-                                     <p className="mt-1">Prov: {item.provider || 'N/A'} | Marca: {item.brand || 'N/A'}</p>
+                                   <td className="p-4 text-xs text-gray-600">
+                                     <p className="mt-1">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
                                      {item.expirationDate && <p className="text-orange-600 mt-1 flex items-center gap-1 font-bold"><Calendar size={12}/> Vence: {item.expirationDate}</p>}
                                    </td>
-                                   <td className="p-4 text-sm text-center">
-                                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm"><MapPin size={12}/> {item.location}</span>
-                                   </td>
                                    <td className="p-4 text-right">
-                                     <div className="flex flex-col items-end">
-                                        <span className={`font-black text-2xl ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty} <span className="text-sm font-medium text-gray-500">{item.unit}</span></span>
-                                        {isLow && <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded mt-1 uppercase tracking-wide">¡Reponer!</span>}
-                                     </div>
+                                     <span className={`font-black text-2xl ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty} <span className="text-sm font-medium text-gray-500">{item.unit}</span></span>
                                    </td>
                                    <td className="p-4">
                                       <div className="flex justify-center gap-2">
-                                        <button onClick={()=>handlePrintLabel(item)} className="text-purple-600 bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100 transition-colors" title="Imprimir Etiqueta QR"><Printer size={18}/></button>
-                                        <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="text-blue-600 bg-blue-50 p-2.5 rounded-lg hover:bg-blue-100 transition-colors" title="Auditar / Consumir"><ScanLine size={18}/></button>
-                                        {isAdmin && (
-                                          <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode || ''); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2.5 rounded-lg hover:bg-gray-200 transition-colors" title="Editar Info"><Settings size={18} /></button>
-                                        )}
-                                        {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
-                                          <button onClick={()=>handleDeleteItem(item.id, item.name)} className="text-red-600 bg-red-50 p-2.5 rounded-lg hover:bg-red-100 transition-colors" title="Eliminar Base de Datos"><LogOut size={18} className="transform rotate-180" /></button>
-                                        )}
+                                        <button onClick={()=>handlePrintLabel(item)} className="text-purple-600 bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100" title="Imprimir"><Printer size={18}/></button>
+                                        <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="text-blue-600 bg-blue-50 p-2.5 rounded-lg hover:bg-blue-100" title="Auditar"><ScanLine size={18}/></button>
+                                        {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode || ''); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2.5 rounded-lg hover:bg-gray-200" title="Editar"><Settings size={18} /></button>}
                                       </div>
                                    </td>
                                  </tr>
@@ -778,196 +747,192 @@
                            </tbody>
                          </table>
                        </div>
-                    </div>
+                    )}
                  </div>
               )}
 
-              {/* === VISTA 4: FORMULARIO (Benchling/Sortly Style) === */}
+              {/* === FORMULARIO REGISTRO === */}
               {activeTab === 'inventory' && showItemForm && (
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 max-w-4xl mx-auto shadow-2xl animate-fade-in relative overflow-hidden">
+                <div className="bg-white p-8 rounded-3xl border border-gray-200 max-w-4xl mx-auto shadow-2xl animate-fade-in relative overflow-hidden pb-20">
                   <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-500"></div>
                   
                   <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-6">
                     <div>
                       <h2 className="text-2xl font-black text-gray-900 flex items-center gap-3">
                         {editingItem ? <Settings className="text-blue-500" size={28}/> : <Plus className="text-green-500" size={28}/>} 
-                        {editingItem ? 'Editar Perfil del Producto' : 'Registro de Nuevo Material'}
+                        {editingItem ? 'Editar Ficha del Producto' : 'Registro de Nueva Ficha de Material'}
                       </h2>
-                      <p className="text-sm text-gray-500 mt-1">Completa los datos para trazabilidad completa (ELN/LIMS).</p>
                     </div>
-                    <button onClick={()=>setShowItemForm(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24} className="text-gray-400"/></button>
+                    <button onClick={()=>{setShowItemForm(false); setImagePreview(null);}} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24} className="text-gray-400"/></button>
                   </div>
 
                   <form onSubmit={handleSaveItem} className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                    {/* Básico */}
+                    
                     <div className="col-span-1 md:col-span-2">
                       <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nombre del Producto / Reactivo *</label>
                       <input name="name" defaultValue={editingItem?.name} required className="w-full p-4 border border-gray-300 rounded-xl font-bold text-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" />
                     </div>
+
+                    {/* IMAGEN DEL PRODUCTO */}
+                    <div className="col-span-1 md:col-span-2 bg-slate-50 p-6 rounded-2xl border border-gray-200 shadow-inner">
+                      <label className="block text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 flex items-center gap-2"><ImageIcon size={18}/> Fotografía del Producto</label>
+                      <div className="flex flex-col sm:flex-row items-center gap-6">
+                         <div className="w-32 h-32 rounded-xl bg-white border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                           {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <ImageIcon className="text-gray-300" size={40}/>}
+                         </div>
+                         <div className="flex-1 flex flex-col sm:flex-row gap-3 w-full">
+                            <label className="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 rounded-xl text-center cursor-pointer transition-colors shadow-sm text-sm flex justify-center items-center gap-2">
+                              <Upload size={18}/> Subir Archivo
+                              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                            </label>
+                            <label className="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl text-center cursor-pointer transition-colors shadow-sm text-sm flex justify-center items-center gap-2">
+                              <Camera size={18}/> Tomar Foto
+                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                            </label>
+                         </div>
+                      </div>
+                    </div>
                     
-                    {/* ID UNIQUE (LabCollector Style) */}
-                    <div className="col-span-1 md:col-span-2 bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 shadow-inner">
-                      <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2"><QrCode size={20} className="text-blue-400"/> Identificación Única de Trazabilidad</h3>
-                      <p className="text-sm text-slate-400 mb-4 font-medium">Escanea el código del fabricante o genera una etiqueta interna del laboratorio.</p>
-                      
-                      <div className="flex flex-col gap-4">
-                        <div className="flex flex-wrap gap-3">
-                          <input name="barcode" value={generatedQR} onChange={(e) => setGeneratedQR(e.target.value)} placeholder="Ej. Lote/SKU o Generar QR..." className="flex-1 min-w-[200px] p-4 rounded-xl font-mono text-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-900 border-none shadow-sm" />
-                          <button type="button" onClick={() => setCameraActiveForm(!cameraActiveForm)} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-6 py-4 rounded-xl flex items-center gap-2 transition-colors shadow-sm"><Camera size={20}/> Escanear</button>
-                          <button type="button" onClick={generateUniqueQR} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-4 rounded-xl flex items-center gap-2 transition-colors shadow-sm"><QrCode size={20}/> Generar LAB ID</button>
-                        </div>
-                        
-                        {cameraActiveForm && (
-                          <div className="w-full max-w-sm mx-auto mt-2">
-                            <div id="qr-reader-form" className="shadow-lg rounded-xl overflow-hidden border-2 border-slate-500 bg-black"></div>
-                            <button type="button" onClick={() => setCameraActiveForm(false)} className="w-full mt-3 py-3 bg-red-500/20 hover:bg-red-500/40 text-red-400 font-bold rounded-xl flex justify-center items-center gap-2 transition-colors"><X size={18}/> Cancelar</button>
-                          </div>
-                        )}
+                    {/* ID UNIQUE */}
+                    <div className="col-span-1 md:col-span-2 bg-slate-900 p-6 rounded-2xl border border-slate-700 shadow-inner mt-2">
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2"><QrCode size={18} className="text-blue-400"/> Identificación LAB ID *</h3>
+                      <div className="flex flex-wrap gap-3">
+                        <input name="barcode" value={generatedQR} onChange={(e) => setGeneratedQR(e.target.value)} required placeholder="Escanea código original o genera uno..." className="flex-1 min-w-[200px] p-3.5 rounded-xl font-mono text-base outline-none" />
+                        <button type="button" onClick={() => setCameraActiveForm(!cameraActiveForm)} className="bg-slate-700 text-white font-bold px-4 py-3 rounded-xl hover:bg-slate-600 transition-colors"><Camera size={20}/></button>
+                        <button type="button" onClick={generateUniqueQR} className="bg-blue-600 text-white font-bold px-4 py-3 rounded-xl hover:bg-blue-500 transition-colors flex items-center gap-2"><QrCode size={18}/> Generar</button>
+                      </div>
+                      {cameraActiveForm && (
+                        <div className="w-full max-w-sm mx-auto mt-4"><div id="qr-reader-form" className="rounded-xl overflow-hidden border-2 border-slate-500"></div></div>
+                      )}
+                    </div>
+
+                    <div className="space-y-6 mt-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Categoría *</label>
+                        <select name="category" defaultValue={editingItem?.category || selectedFolder} className="w-full p-3.5 border border-gray-300 rounded-xl font-medium outline-none">{CATEGORIES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Ubicación Física *</label>
+                        <input name="location" defaultValue={editingItem?.location} required placeholder="Ej. Estante A, Refri -20°C" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
                       </div>
                     </div>
 
-                    {/* Meta Info */}
-                    <div className="space-y-6">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Categoría *</label>
-                        <select name="category" defaultValue={editingItem?.category || selectedFolder} className="w-full p-3.5 border border-gray-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 outline-none">
-                          {CATEGORIES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1"><FileText size={14}/> Proyecto / Protocolo (Benchling)</label>
-                        <input name="project" defaultValue={editingItem?.project} placeholder="Ej. Extracción RNA Pacientes, Proyecto COVID..." className="w-full p-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-blue-50/30" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1"><ImageIcon size={14}/> URL de Imagen (Sortly)</label>
-                        <input name="imageUrl" defaultValue={editingItem?.imageUrl} placeholder="https://ejemplo.com/foto.jpg" type="url" className="w-full p-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-6">
+                    <div className="space-y-6 mt-4">
                       <div className="grid grid-cols-2 gap-4">
                          <div>
-                           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Proveedor</label>
-                           <input name="provider" defaultValue={editingItem?.provider} placeholder="Ej. Thermo Fisher" className="w-full p-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Proveedor</label>
+                           <input name="provider" defaultValue={editingItem?.provider} placeholder="Ej. Thermo Fisher" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
                          </div>
                          <div>
-                           <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Marca</label>
-                           <input name="brand" defaultValue={editingItem?.brand} placeholder="Ej. Invitrogen" className="w-full p-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Marca</label>
+                           <input name="brand" defaultValue={editingItem?.brand} placeholder="Ej. Invitrogen" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
+                         </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div>
+                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nº de Catálogo</label>
+                           <input name="catalogNum" defaultValue={editingItem?.catalogNum} placeholder="Ej. REF 12345" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
+                         </div>
+                         <div>
+                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nº de Lote</label>
+                           <input name="lotNum" defaultValue={editingItem?.lotNum} placeholder="Ej. LOT 987X" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
                          </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Fecha de Caducidad</label>
-                        <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Ubicación Física *</label>
-                        <input name="location" defaultValue={editingItem?.location} required placeholder="Ej. Estante A, Refri -20°C" className="w-full p-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-orange-50/30" />
+                        <label className="block text-xs font-bold text-orange-600 uppercase mb-2 flex items-center gap-1"><Calendar size={14}/> Fecha de Caducidad</label>
+                        <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3.5 border border-orange-300 bg-orange-50/30 rounded-xl outline-none" />
                       </div>
                     </div>
 
-                    {/* Stock Engine */}
-                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
+                    <div className="col-span-1 md:col-span-2">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Observaciones / Notas de Seguridad</label>
+                      <textarea name="observations" defaultValue={editingItem?.observations} placeholder="Condiciones especiales, notas de almacenamiento, sensibilidad, etc." rows="3" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none"></textarea>
+                    </div>
+
+                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t border-gray-100">
                       <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200">
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Stock Inicial *</label>
-                        <input type="number" name="qty" defaultValue={editingItem?.qty || 0} required className="w-full p-3 border border-gray-300 rounded-xl font-black text-2xl text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Stock Inicial *</label>
+                        <input type="number" name="qty" defaultValue={editingItem?.qty || 0} required className="w-full p-3 border border-gray-300 rounded-xl font-black text-2xl text-center outline-none" />
                       </div>
                       <div className="bg-red-50 p-5 rounded-2xl border border-red-200">
-                        <label className="block text-xs font-bold text-red-700 uppercase tracking-wider mb-2 flex items-center gap-1"><AlertTriangle size={14}/> Alerta Mínima *</label>
-                        <input type="number" name="minThreshold" defaultValue={editingItem?.minThreshold || 1} required className="w-full p-3 border border-red-300 rounded-xl font-black text-2xl text-center text-red-700 focus:ring-2 focus:ring-red-500 outline-none bg-white" />
+                        <label className="block text-xs font-bold text-red-700 uppercase mb-2 text-center flex items-center justify-center gap-1"><AlertTriangle size={14}/> Alerta Mínima *</label>
+                        <input type="number" name="minThreshold" defaultValue={editingItem?.minThreshold || 1} required className="w-full p-3 border border-red-300 rounded-xl font-black text-2xl text-center text-red-700 outline-none" />
                       </div>
                       <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200">
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Unidad Medida *</label>
-                        <input name="unit" defaultValue={editingItem?.unit || 'uds'} required placeholder="Ej. ml, kit, caja" className="w-full p-3 border border-gray-300 rounded-xl font-bold text-lg text-center focus:ring-2 focus:ring-blue-500 outline-none" />
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Unidad *</label>
+                        <input name="unit" defaultValue={editingItem?.unit || 'uds'} required placeholder="Ej. ml" className="w-full p-3 border border-gray-300 rounded-xl font-bold text-lg text-center outline-none" />
                       </div>
                     </div>
 
-                    <div className="col-span-1 md:col-span-2 pt-6 flex gap-4">
-                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl text-lg shadow-[0_10px_20px_rgba(37,99,235,0.3)] transition-transform hover:-translate-y-1">
-                        {editingItem ? 'Guardar Cambios en Base de Datos' : 'Registrar Nuevo Elemento'}
-                      </button>
+                    <div className="col-span-1 md:col-span-2 pt-6">
+                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl text-lg shadow-lg">Guardar Ficha en Base de Datos</button>
                     </div>
                   </form>
                 </div>
               )}
 
-              {/* === VISTA 5: ESCÁNER / TERMINAL DE AUDITORÍA === */}
+              {/* === MÓDULO AUDITORÍA === */}
               {activeTab === 'scanner' && (
-                <div className="max-w-6xl mx-auto space-y-8 animate-fade-in">
+                <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-10">
                   <div className="text-center mb-10">
-                    <h2 className="text-4xl font-black text-gray-900 tracking-tight">Terminal LIMS de Auditoría</h2>
-                    <p className="text-gray-500 mt-2 font-medium text-lg">Escanea un código para ejecutar operaciones de inventario seguras.</p>
+                    <h2 className="text-4xl font-black text-gray-900">Terminal Segura de Auditoría</h2>
+                    <p className="text-gray-500 mt-2 font-medium">Registra el consumo de forma estricta y auditable.</p>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    
                     {/* PANEL IZQUIERDO: LECTURA */}
-                    <div className="lg:col-span-5 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col items-center">
+                    <div className="lg:col-span-5 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col items-center h-fit">
                       <div className="w-full space-y-8">
-                        
                         <div className="space-y-4">
-                          <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><Camera size={18} className="text-blue-600" /> Óptica (Cámara)</label>
+                          <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><Camera size={18} className="text-blue-600" /> Óptica</label>
                           {!cameraActive ? (
-                            <button onClick={() => setCameraActive(true)} className="w-full py-6 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold flex flex-col items-center justify-center gap-2 shadow-lg transition-transform hover:scale-[1.02]">
+                            <button onClick={() => setCameraActive(true)} className="w-full py-6 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold flex flex-col items-center justify-center gap-2 shadow-lg">
                               <Camera size={36} className="text-blue-400" /> Activar Lector Óptico
                             </button>
                           ) : (
                             <div className="space-y-4 animate-fade-in">
-                              <div id="qr-reader" className="shadow-inner bg-black rounded-2xl overflow-hidden border-4 border-slate-800"></div>
-                              <button onClick={() => setCameraActive(false)} className="w-full py-4 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold flex items-center justify-center gap-2 transition-colors">
-                                <X size={20} /> Detener Lector
-                              </button>
+                              <div id="qr-reader" className="shadow-inner bg-black rounded-2xl border-4 border-slate-800"></div>
+                              <button onClick={() => setCameraActive(false)} className="w-full py-4 bg-red-50 text-red-600 rounded-xl font-bold flex justify-center gap-2"><X size={20} /> Detener</button>
                             </div>
                           )}
                         </div>
-
-                        <div className="relative flex items-center py-4"><div className="flex-grow border-t border-gray-200"></div><span className="flex-shrink-0 mx-4 text-gray-400 text-sm font-bold">MÉTODO MANUAL</span><div className="flex-grow border-t border-gray-200"></div></div>
-
-                        <form id="scanner-form" onSubmit={handleBarcodeSubmit} className="space-y-4">
-                          <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><Keyboard size={18} className="text-blue-600" /> Láser / Teclado</label>
-                          <div className="relative">
-                            <ScanLine className="absolute left-4 top-1/2 transform -translate-y-1/2 text-blue-500" size={24} />
-                            <input ref={scannerInputRef} type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="ID del producto..." className="w-full pl-14 pr-4 py-5 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:bg-white font-mono text-xl shadow-inner transition-all outline-none placeholder-gray-400" autoFocus />
-                          </div>
-                          <button type="submit" id="hidden-submit" className="hidden">Submit</button>
+                        <div className="relative flex items-center py-2"><div className="flex-grow border-t border-gray-200"></div><span className="flex-shrink-0 mx-4 text-gray-400 text-sm font-bold">Ó BÚSQUEDA MANUAL</span><div className="flex-grow border-t border-gray-200"></div></div>
+                        <form onSubmit={handleBarcodeSubmit} className="relative">
+                          <ScanLine className="absolute left-4 top-1/2 transform -translate-y-1/2 text-blue-500" size={24} />
+                          <input ref={scannerInputRef} type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="Código, Catálogo o Lote..." className="w-full pl-14 pr-4 py-5 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:border-blue-500 outline-none font-mono text-base shadow-inner" autoFocus />
+                          <button type="submit" className="hidden"></button>
                         </form>
                       </div>
                     </div>
 
                     {/* PANEL DERECHO: ACCIÓN */}
-                    <div className="lg:col-span-7 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col min-h-[500px] relative overflow-hidden">
-                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-100 pb-4">Consola de Operaciones</h3>
+                    <div className="lg:col-span-7 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col min-h-[500px]">
+                      <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-100 pb-4">Ficha Técnica y Operaciones</h3>
                       
                       {!scannedItem ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-gray-300 space-y-6 bg-slate-50/50 rounded-2xl border-2 border-dashed border-gray-200">
-                          <div className="relative">
-                            <PackageSearch size={80} className="text-gray-300 animate-pulse" />
-                            <ScanLine size={30} className="text-blue-400 absolute bottom-0 right-0" />
-                          </div>
-                          <p className="font-bold text-xl text-gray-400 text-center">Esperando Lectura<br/><span className="text-sm font-medium text-gray-400">Escanea un lote para comenzar auditoría.</span></p>
+                        <div className="flex-1 flex flex-col items-center justify-center text-gray-300 space-y-6 bg-slate-50/50 rounded-2xl border-2 border-dashed border-gray-200 p-10">
+                          <PackageSearch size={80} className="text-gray-300 animate-pulse" />
+                          <p className="font-bold text-xl text-gray-400 text-center">Esperando Lectura</p>
                         </div>
                       ) : (
                         <div className="flex-1 flex flex-col animate-fade-in h-full justify-between">
-                          
                           <div>
-                            {/* Cabecera del Item */}
-                            <div className="flex items-start justify-between mb-6">
+                            <div className="flex items-start justify-between mb-4">
                               <div>
-                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-black uppercase tracking-wider rounded-lg mb-3 shadow-sm">{scannedItem.category}</span>
                                 <h4 className="text-3xl font-black text-gray-900 leading-tight mb-2">{scannedItem.name}</h4>
-                                <div className="flex items-center gap-3">
-                                  <p className="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded-md flex items-center gap-1"><QrCode size={14}/> {scannedItem.barcode}</p>
-                                  {scannedItem.project && <p className="text-sm font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md flex items-center gap-1"><FileText size={14}/> {scannedItem.project}</p>}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded border"><QrCode size={14} className="inline mr-1"/>{scannedItem.barcode}</p>
                                 </div>
                               </div>
-                              {scannedItem.imageUrl && (
-                                <img src={scannedItem.imageUrl} className="w-20 h-20 rounded-xl object-cover border border-gray-200 shadow-sm" alt={scannedItem.name} />
-                              )}
+                              {scannedItem.imageUrl && <img src={scannedItem.imageUrl} className="w-24 h-24 rounded-xl object-cover border-2 border-gray-200 shadow-sm shrink-0" />}
                             </div>
-                            
-                            {/* Meta Info */}
-                            <div className="bg-gray-50 rounded-2xl p-4 mb-6 text-sm border border-gray-200 grid grid-cols-2 gap-y-4 gap-x-2">
+
+                            <div className="bg-gray-50 rounded-2xl p-5 mb-4 text-sm border border-gray-200 grid grid-cols-2 gap-y-4 gap-x-4">
+                              <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Catálogo</p><p className="font-medium text-gray-900">{scannedItem.catalogNum || '--'}</p></div>
+                              <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Lote</p><p className="font-medium text-gray-900">{scannedItem.lotNum || '--'}</p></div>
                               <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Marca</p><p className="font-medium text-gray-900">{scannedItem.brand || '--'}</p></div>
                               <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Proveedor</p><p className="font-medium text-gray-900">{scannedItem.provider || '--'}</p></div>
+                              
                               <div className="col-span-2 border-t border-gray-200 pt-3 flex justify-between items-center">
                                 <div>
                                   <p className="text-xs text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1"><Calendar size={12}/> Vencimiento</p>
@@ -982,9 +947,14 @@
                               </div>
                             </div>
 
-                            {/* Stock Box */}
-                            <div className="bg-blue-600 text-white rounded-2xl p-6 mb-6 flex justify-between items-center shadow-lg relative overflow-hidden">
-                              <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10"></div>
+                            {scannedItem.observations && (
+                              <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl mb-4">
+                                <p className="text-xs text-yellow-800 uppercase font-bold tracking-wider mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones de la Ficha</p>
+                                <p className="text-sm text-yellow-900 font-medium">{scannedItem.observations}</p>
+                              </div>
+                            )}
+
+                            <div className="bg-blue-600 text-white rounded-2xl p-6 mb-6 flex justify-between items-center shadow-lg">
                               <div>
                                 <p className="text-xs uppercase font-bold tracking-widest text-blue-200 mb-1">Inventario Actual</p>
                                 <div className="flex items-baseline gap-2">
@@ -992,36 +962,41 @@
                                   <p className="text-2xl font-medium text-blue-200">{scannedItem.unit}</p>
                                 </div>
                               </div>
-                              {scannedItem.qty < scannedItem.minThreshold && (
-                                <div className="bg-red-500 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-md">
-                                  <AlertTriangle size={20}/> ¡Nivel Crítico!
-                                </div>
-                              )}
                             </div>
                           </div>
                           
-                          {/* Botones Operativos */}
-                          <div className="space-y-4 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                          <div className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-200 mt-4">
                             <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-200">
-                              <button onClick={() => setScanAction('info')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg transition-all ${scanAction === 'info' ? 'bg-slate-800 shadow-md text-white' : 'text-gray-500 hover:text-gray-800'}`}>Consulta</button>
-                              <button onClick={() => setScanAction('remove')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg transition-all ${scanAction === 'remove' ? 'bg-orange-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-800'}`}>Retirar</button>
-                              
-                              {/* Solo admin puede ingresar */}
-                              {isAdmin && (
-                                <button onClick={() => setScanAction('add')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg transition-all ${scanAction === 'add' ? 'bg-green-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-800'}`}>Ingresar</button>
-                              )}
+                              <button onClick={() => setScanAction('info')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg ${scanAction === 'info' ? 'bg-slate-800 text-white' : 'text-gray-500'}`}>Solo Auditoría</button>
+                              <button onClick={() => setScanAction('remove')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg ${scanAction === 'remove' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>Consumir</button>
+                              {isAdmin && <button onClick={() => setScanAction('add')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg ${scanAction === 'add' ? 'bg-green-500 text-white' : 'text-gray-500'}`}>Ingresar</button>}
                             </div>
                             
                             {scanAction !== 'info' && (
-                              <div className="flex gap-4 animate-fade-in pt-2">
-                                <div className="flex items-center border-2 border-gray-300 rounded-xl bg-white w-36 shadow-inner">
-                                  <button onClick={() => setScanAmount(Math.max(1, scanAmount - 1))} className="p-4 hover:bg-gray-100 text-gray-600 rounded-l-xl transition-colors"><Minus size={18}/></button>
-                                  <input type="number" min="1" value={scanAmount} onChange={(e) => setScanAmount(parseInt(e.target.value) || 1)} className="w-full text-center font-black text-2xl outline-none"/>
-                                  <button onClick={() => setScanAmount(scanAmount + 1)} className="p-4 hover:bg-gray-100 text-gray-600 rounded-r-xl transition-colors"><Plus size={18}/></button>
+                              <div className="animate-fade-in space-y-4 pt-2">
+                                {scanAction === 'remove' && (
+                                  <div>
+                                    <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Motivo de Retiro *</label>
+                                    <select value={scanReason} onChange={e => setScanReason(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 font-medium outline-none focus:border-orange-500 bg-white">
+                                      <option value="Protocolo rutinario">Protocolo rutinario</option>
+                                      <option value="Muestra desperdiciada / Error">Muestra desperdiciada / Error</option>
+                                      <option value="Calibración de equipo">Calibración de equipo</option>
+                                      <option value="Limpieza o Mantenimiento">Limpieza o Mantenimiento</option>
+                                      <option value="Caducado / Contaminado">Caducado / Contaminado (Merma)</option>
+                                    </select>
+                                  </div>
+                                )}
+                                
+                                <div className="flex flex-col sm:flex-row gap-4">
+                                  <div className="flex items-center border-2 border-gray-300 rounded-xl bg-white shadow-inner sm:w-40 w-full">
+                                    <button type="button" onClick={() => setScanAmount(Math.max(1, scanAmount - 1))} className="p-4 text-gray-600 rounded-l-xl hover:bg-gray-100"><Minus size={20}/></button>
+                                    <input type="number" min="1" value={scanAmount} onChange={(e) => setScanAmount(parseInt(e.target.value) || 1)} className="w-full text-center font-black text-2xl outline-none"/>
+                                    <button type="button" onClick={() => setScanAmount(scanAmount + 1)} className="p-4 text-gray-600 rounded-r-xl hover:bg-gray-100"><Plus size={20}/></button>
+                                  </div>
+                                  <button id="btn-action-success" onClick={executeScanAction} className={`flex-1 py-4 rounded-xl font-black text-white text-lg uppercase tracking-wider shadow-xl ${scanAction === 'add' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-600 hover:bg-orange-500'} transition-transform hover:-translate-y-1`}>
+                                    {scanAction === 'add' ? 'Confirmar Ingreso' : 'Registrar Retiro'}
+                                  </button>
                                 </div>
-                                <button id="btn-action-success" onClick={executeScanAction} className={`flex-1 py-4 rounded-xl font-black text-white text-lg uppercase tracking-wider shadow-xl transition-all transform hover:-translate-y-1 ${scanAction === 'add' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-600 hover:bg-orange-500'}`}>
-                                  {scanAction === 'add' ? 'Confirmar Ingreso' : 'Confirmar Retiro'}
-                                </button>
                               </div>
                             )}
                           </div>
@@ -1032,14 +1007,14 @@
                 </div>
               )}
 
-              {/* === VISTA 6: HISTORIAL DE MOVIMIENTOS (LabWare LIMS Style) === */}
+              {/* === MÓDULO HISTORIAL === */}
               {activeTab === 'history' && isAdmin && (
-                <div className="max-w-6xl mx-auto animate-fade-in space-y-6">
+                <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
                   <div className="flex items-center gap-4 mb-6">
-                     <div className="bg-slate-800 p-4 rounded-2xl text-white shadow-lg"><History size={32}/></div>
+                     <div className="bg-slate-800 p-4 rounded-2xl text-white shadow-lg"><ClipboardSignature size={32}/></div>
                      <div>
-                       <h2 className="text-3xl font-black text-gray-900 tracking-tight">Audit Trail (LIMS)</h2>
-                       <p className="text-gray-500 font-medium">Registro inmutable de transacciones del laboratorio.</p>
+                       <h2 className="text-3xl font-black text-gray-900 tracking-tight">Historial Operativo</h2>
+                       <p className="text-gray-500 font-medium">Registro inmutable de movimientos en el inventario.</p>
                      </div>
                   </div>
                   
@@ -1048,36 +1023,27 @@
                       <table className="w-full text-left whitespace-nowrap">
                         <thead className="bg-slate-50 border-b border-gray-200">
                           <tr>
-                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp / Fecha</th>
-                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Operador (Usuario)</th>
+                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha / Hora</th>
+                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Usuario</th>
                             <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Operación</th>
-                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Reactivo / Ítem</th>
-                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Proyecto Vinculado</th>
+                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Reactivo / Equipo</th>
+                            <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Motivo Declarado</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                           {logs.slice(0, 150).map(log => (
                             <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="p-5">
-                                <p className="font-bold text-gray-800">{new Date(log.timestamp).toLocaleDateString()}</p>
-                                <p className="text-xs text-gray-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</p>
-                              </td>
-                              <td className="p-5">
-                                <p className="font-bold text-gray-900 flex items-center gap-2"><User size={14} className="text-blue-500"/> {log.userName}</p>
-                                <p className="text-xs text-gray-400">{log.userEmail}</p>
-                              </td>
+                              <td className="p-5"><p className="font-bold text-gray-800">{new Date(log.timestamp).toLocaleDateString()}</p><p className="text-xs text-gray-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</p></td>
+                              <td className="p-5"><p className="font-bold text-gray-900 flex items-center gap-2"><User size={14} className="text-blue-500"/> {log.userName}</p><p className="text-xs text-gray-400">{log.userEmail}</p></td>
                               <td className="p-5 text-center">
                                 <span className={`px-4 py-1.5 rounded-full text-[10px] uppercase font-black tracking-wider ${log.action === 'add' ? 'bg-green-100 text-green-700' : log.action === 'remove' ? 'bg-orange-100 text-orange-700' : log.action === 'create' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
                                   {log.action === 'add' ? '+ INGRESO' : log.action === 'remove' ? '- CONSUMO' : log.action === 'create' ? 'CREACIÓN' : 'ELIMINADO'} {log.amount > 0 ? `(${log.amount})` : ''}
                                 </span>
                               </td>
                               <td className="p-5 font-bold text-gray-800">{log.itemName}</td>
-                              <td className="p-5 text-sm font-medium text-gray-600">{log.project || '--'}</td>
+                              <td className="p-5 text-sm font-medium text-gray-600 italic">"{log.reason || 'N/A'}"</td>
                             </tr>
                           ))}
-                          {logs.length === 0 && (
-                            <tr><td colSpan="5" className="p-12 text-center text-gray-400 font-medium"><History size={48} className="mx-auto mb-3 opacity-20"/>No hay transacciones auditables en el sistema.</td></tr>
-                          )}
                         </tbody>
                       </table>
                     </div>
@@ -1085,46 +1051,29 @@
                 </div>
               )}
 
-              {/* === VISTA 7: ACCESOS (Control de Superadmin) === */}
+              {/* === MÓDULO USUARIOS === */}
               {activeTab === 'users' && currentUserData.role === 'superadmin' && (
                 <div className="max-w-5xl mx-auto animate-fade-in space-y-6">
                   <div className="flex items-center gap-4 mb-6">
-                     <div className="bg-purple-700 p-4 rounded-2xl text-white shadow-lg shadow-purple-500/30"><ShieldAlert size={32}/></div>
-                     <div>
-                       <h2 className="text-3xl font-black text-gray-900 tracking-tight">Panel de Seguridad</h2>
-                       <p className="text-gray-500 font-medium">Gestiona qué permisos tienen las cuentas de Google registradas.</p>
-                     </div>
+                     <div className="bg-purple-700 p-4 rounded-2xl text-white shadow-lg"><ShieldAlert size={32}/></div>
+                     <div><h2 className="text-3xl font-black text-gray-900">Panel de Seguridad</h2><p className="text-gray-500">Gestiona roles de los técnicos.</p></div>
                   </div>
-
                   <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
                     <table className="w-full text-left">
-                      <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                          <th className="p-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Identidad</th>
-                          <th className="p-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Último Acceso</th>
-                          <th className="p-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Nivel de Privilegios</th>
-                        </tr>
-                      </thead>
+                      <thead className="bg-gray-50 border-b border-gray-200"><tr><th className="p-6 text-xs font-bold text-gray-500 uppercase">Identidad</th><th className="p-6 text-xs font-bold text-gray-500 uppercase">Privilegios</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {allUsers.map(u => (
-                          <tr key={u.uid} className={`hover:bg-purple-50/30 transition-colors ${SUPER_ADMIN_EMAILS.includes(u.email) ? 'bg-purple-50/50' : ''}`}>
+                          <tr key={u.uid}>
                             <td className="p-6 flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500 overflow-hidden">
-                                {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover"/> : <User size={20}/>}
-                              </div>
-                              <div>
-                                <p className="font-bold text-gray-900">{u.name}</p>
-                                <p className="text-xs text-gray-500 font-mono">{u.email}</p>
-                              </div>
+                              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500 overflow-hidden">{u.photoURL ? <img src={u.photoURL}/> : <User size={20}/>}</div>
+                              <div><p className="font-bold text-gray-900">{u.name}</p><p className="text-xs text-gray-500 font-mono">{u.email}</p></div>
                             </td>
-                            <td className="p-6 text-sm text-gray-600 font-medium">{new Date(u.lastLogin).toLocaleDateString()}</td>
                             <td className="p-6">
                               {SUPER_ADMIN_EMAILS.includes(u.email) ? (
-                                <span className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-2 w-fit"><ShieldCheck size={14}/> Propietario del Sistema</span>
+                                <span className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-black uppercase"><ShieldCheck size={14} className="inline mr-1"/> Propietario</span>
                               ) : (
-                                <select value={u.role || 'user'} onChange={(e)=>handleUpdateUserRole(u.uid, e.target.value)} className="p-3 border border-gray-300 rounded-xl shadow-sm font-bold text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 outline-none w-full max-w-[300px] bg-white cursor-pointer transition-colors hover:border-purple-300">
-                                  <option value="user">Usuario / Técnico (Solo Consultar y Consumir)</option>
-                                  <option value="admin">Administrador (Crear, Ingresar y Modificar)</option>
+                                <select value={u.role || 'user'} onChange={(e)=>handleUpdateUserRole(u.uid, e.target.value)} className="p-3 border rounded-xl font-bold text-sm outline-none bg-white">
+                                  <option value="user">Usuario (Solo Consumir)</option><option value="admin">Administrador (Ingresos/CRUD)</option>
                                 </select>
                               )}
                             </td>
@@ -1142,7 +1091,6 @@
       );
     }
 
-    // Iniciar renderizado
     const root = createRoot(document.getElementById('root'));
     root.render(<LabInventoryApp />);
   </script>
