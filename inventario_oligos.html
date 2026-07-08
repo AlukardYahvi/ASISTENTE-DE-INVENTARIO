@@ -13,6 +13,7 @@
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .glass-effect { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
   </style>
 </head>
 <body class="bg-slate-50 text-gray-900 font-sans">
@@ -26,7 +27,10 @@
     import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
     import * as LucideIcons from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
 
-    const { Search, Plus, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, AlignLeft, X } = LucideIcons;
+    const { 
+      Search, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, 
+      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User
+    } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
       apiKey: "AIzaSyDeaQnmO8nRG4stRrbnmONaz_k1EUWqVHc",
@@ -52,11 +56,17 @@
     function OligosApp() {
       const [currentUser, setCurrentUser] = useState(null);
       const [oligos, setOligos] = useState([]);
+      const [oligoLogs, setOligoLogs] = useState([]); // Historial de logs
       const [searchQuery, setSearchQuery] = useState('');
+      const [loading, setLoading] = useState(true);
+
+      // Estados de Modales
       const [showForm, setShowForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
       const [imagePreview, setImagePreview] = useState(null);
-      const [loading, setLoading] = useState(true);
+      
+      const [consumeItem, setConsumeItem] = useState(null); // Modal para descontar/usar
+      const [showHistory, setShowHistory] = useState(null); // Modal para ver historial
 
       useEffect(() => {
         const initAuth = async () => {
@@ -82,19 +92,26 @@
       useEffect(() => {
         if (!currentUser) return;
 
+        // Listener para Inventario de Oligos
         const invRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_oligos');
         const unsubInv = onSnapshot(invRef, 
           (snapshot) => {
             setOligos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
           },
-          (error) => {
-            console.error("Error al escuchar cambios: ", error);
-            setLoading(false);
-          }
+          (error) => { console.error("Error al escuchar cambios: ", error); setLoading(false); }
         );
 
-        return () => unsubInv();
+        // Listener para Historial/Logs de Oligos
+        const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_oligos_logs');
+        const unsubLogs = onSnapshot(logsRef, 
+          (snapshot) => {
+            setOligoLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          },
+          (error) => { console.error("Error al escuchar logs: ", error); }
+        );
+
+        return () => { unsubInv(); unsubLogs(); };
       }, [currentUser]);
 
       const handleImageUpload = (e) => {
@@ -116,6 +133,24 @@
         reader.readAsDataURL(file);
       };
 
+      const logAction = async (itemId, itemName, action, details, amountTaken = 0, unit = '') => {
+        try {
+          const logId = `log_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos_logs', logId), {
+            itemId,
+            itemName,
+            action,
+            details,
+            amountTaken,
+            unit,
+            userEmail: currentUser.email,
+            timestamp: new Date().toISOString()
+          });
+        } catch (e) {
+          console.error("Error guardando log:", e);
+        }
+      };
+
       const handleSave = async (e) => {
         e.preventDefault();
         if (!currentUser || !currentUser.isSuperAdmin) return alert("Solo los administradores autorizados pueden añadir elementos.");
@@ -125,21 +160,113 @@
         data.qty = Number(data.qty);
         data.imageUrl = imagePreview || editingItem?.imageUrl || '';
 
+        // Formato para Oligos
+        if (!data.barcode) {
+            data.barcode = `LAB-OL-${Date.now().toString(36).toUpperCase()}`;
+        }
+
+        const isNew = !editingItem;
         const docId = editingItem ? editingItem.id : `oligo_${Date.now()}`;
+        
         try {
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', docId), data, { merge: true });
+          
+          // Registrar en el historial
+          await logAction(
+            docId, 
+            data.name, 
+            isNew ? 'creado' : 'modificado', 
+            isNew ? 'Registro inicial en el sistema' : 'Actualización de datos del oligo'
+          );
+
           setShowForm(false); setEditingItem(null); setImagePreview(null);
         } catch (err) { alert("Error al guardar: " + err.message); }
       };
 
-      const handleDelete = async (id) => {
+      const handleConsumeSubmit = async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const amountToTake = Number(formData.get('amount'));
+        const reason = formData.get('reason');
+
+        if (amountToTake <= 0) return alert("Ingresa una cantidad válida.");
+        if (amountToTake > consumeItem.qty) return alert("No hay suficiente cantidad en inventario.");
+
+        const newQty = consumeItem.qty - amountToTake;
+
+        try {
+          // Actualizar cantidad
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', consumeItem.id), { qty: newQty }, { merge: true });
+          
+          // Registrar consumo en historial
+          await logAction(
+            consumeItem.id,
+            consumeItem.name,
+            'consumido',
+            reason,
+            amountToTake,
+            consumeItem.unit
+          );
+
+          setConsumeItem(null);
+        } catch (err) { alert("Error al registrar el uso: " + err.message); }
+      };
+
+      const handleDelete = async (id, name) => {
         if (!currentUser?.isSuperAdmin) return;
         if (window.confirm("¿Seguro que deseas eliminar este oligo permanentemente?")) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', id));
         }
       };
 
-      if (loading) return <div className="h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>;
+      const handlePrintAllLabels = () => {
+        const printWindow = window.open('', '_blank');
+        if (oligos.length === 0) return alert("No hay elementos para imprimir.");
+
+        let labelsHtml = oligos.map(item => {
+          const code = item.barcode || item.id;
+          const title = item.name;
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(code)}`;
+          const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(code)}&scaleX=2&scaleY=1&includetext=true`;
+          
+          return `
+            <div class="label-box">
+              <div class="title">${title} <br/><span style="font-weight:normal; font-size:9px;">(${item.species || 'N/A'})</span></div>
+              <div class="codes">
+                 <img src="${qrUrl}" alt="QR" class="qr" />
+                 <img src="${barcodeUrl}" alt="Barcode" class="barcode" />
+              </div>
+              <div class="meta"><strong>Lote:</strong> ${item.lotNum || '--'} | <strong>Caja:</strong> ${item.locationBox || '--'}</div>
+            </div>
+          `;
+        }).join('');
+
+        printWindow.document.write(`
+          <html><head><title>Catálogo de Oligos</title><style>
+            body { font-family: sans-serif; margin: 0; padding: 20px; background: #fff;}
+            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7cm, 1fr)); gap: 15px; }
+            .label-box { border: 1px dashed #666; padding: 10px; display: flex; flex-direction: column; align-items: center; text-align: center; border-radius: 4px;}
+            .title { font-size: 11px; font-weight: bold; margin-bottom: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .codes { display: flex; gap: 10px; align-items: center; justify-content: center; width: 100%;}
+            .qr { width: 50px; height: 50px; }
+            .barcode { height: 40px; max-width: 120px; object-fit: contain; }
+            .meta { font-size: 10px; color: #333; margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; width: 100%;}
+            @media print { body { padding: 0; } .label-box { page-break-inside: avoid; border: 1px solid #000; } }
+          </style></head><body>
+            <h2 style="text-align:center; margin-bottom: 20px;">Catálogo General de Etiquetas de Oligos</h2>
+            <div class="grid">${labelsHtml}</div>
+            <script>setTimeout(() => { window.print(); }, 2000); <\/script>
+          </body></html>
+        `);
+        printWindow.document.close();
+      };
+
+      const formatDate = (isoString) => {
+        const d = new Date(isoString);
+        return d.toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+      };
+
+      if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>;
 
       if (!currentUser) {
         return (
@@ -148,143 +275,347 @@
               <ShieldAlert className="mx-auto text-orange-500 mb-4" size={48} />
               <h2 className="text-xl font-bold mb-2">Acceso Restringido</h2>
               <p className="text-gray-600 mb-6">Debes iniciar sesión en la aplicación principal (LabManager) para acceder a este módulo.</p>
-              <a href="index.html" className="block w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700">Ir a LabManager</a>
+              <a href="index.html" className="block w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700">Ir a LabManager</a>
             </div>
           </div>
         );
       }
 
       return (
-        <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto">
-          {/* Cabecera */}
-          <div className="bg-white rounded-3xl shadow-sm border border-emerald-100 p-6 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-4">
-              <div className="bg-emerald-100 text-emerald-700 p-3 rounded-2xl"><AlignLeft size={32} /></div>
-              <div>
-                <h1 className="text-2xl font-black text-gray-900">Catálogo de Oligos</h1>
-                <p className="text-sm text-gray-500">Módulo Especializado LabManager</p>
+        <div className="min-h-screen pb-12 bg-slate-50 relative">
+          
+          {/* Header con Diseño Llamativo (Esmeralda/Cerceta) */}
+          <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-900 pb-24 pt-8 px-4 md:px-8 shadow-lg">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-4 text-white">
+                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"><Layers size={32} /></div>
+                <div>
+                  <h1 className="text-3xl font-black tracking-tight">Inventario de Oligos</h1>
+                  <p className="text-emerald-200 font-medium text-sm mt-1">Módulo Especializado LabManager</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-4 w-full sm:w-auto">
-              <a href="index.html" className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-bold flex items-center gap-2"><ArrowLeft size={18}/> Volver</a>
-              {currentUser.isSuperAdmin && (
-                <button onClick={() => {setEditingItem(null); setImagePreview(null); setShowForm(true);}} className="flex-1 sm:flex-none px-6 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-md">
-                  + Registrar
-                </button>
-              )}
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <a href="index.html" className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors font-bold flex items-center gap-2 backdrop-blur-sm"><ArrowLeft size={18}/> Dashboard</a>
+                {currentUser.isSuperAdmin && (
+                  <button onClick={() => {setEditingItem(null); setImagePreview(null); setShowForm(true);}} className="flex-1 md:flex-none px-6 py-2 bg-white text-emerald-700 rounded-xl font-bold hover:bg-emerald-50 shadow-xl transition-all">
+                    + Registrar Nuevo
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Formulario */}
-          {showForm && currentUser.isSuperAdmin && (
-            <div className="bg-white p-6 rounded-3xl shadow-lg border border-emerald-200 mb-8 animate-fade-in relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-black text-gray-800">{editingItem ? 'Editar Oligo' : 'Nuevo Oligo'}</h2>
-                <button onClick={() => {setShowForm(false); setImagePreview(null); setEditingItem(null);}} className="p-2 hover:bg-gray-100 rounded-full"><X size={20}/></button>
-              </div>
-              <form onSubmit={handleSave} className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-6">
-                  {/* Imagen */}
-                  <div className="w-full sm:w-1/3 space-y-2">
-                    <label className="block text-xs font-bold text-gray-500 uppercase">Foto (Opcional)</label>
-                    <div className="h-40 w-full bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl flex items-center justify-center overflow-hidden relative">
-                      {imagePreview ? <img src={imagePreview} className="object-cover w-full h-full" /> : <ImageIcon className="text-gray-300" size={32}/>}
-                      <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                    </div>
-                  </div>
-                  {/* Datos Principales */}
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Secuencia / Nombre *</label>
-                      <input name="name" defaultValue={editingItem?.name} required className="w-full p-3 border rounded-lg focus:border-emerald-500 outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Marca / Sintetizador *</label>
-                      <input name="brand" defaultValue={editingItem?.brand} required className="w-full p-3 border rounded-lg focus:border-emerald-500 outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nº de Catálogo</label>
-                      <input name="catalogNum" defaultValue={editingItem?.catalogNum} className="w-full p-3 border rounded-lg focus:border-emerald-500 outline-none font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nº de Lote</label>
-                      <input name="lotNum" defaultValue={editingItem?.lotNum} className="w-full p-3 border rounded-lg focus:border-emerald-500 outline-none font-mono" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-orange-500 uppercase mb-1">Caducidad</label>
-                      <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3 border rounded-lg focus:border-emerald-500 outline-none" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Cantidad *</label>
-                      <input type="number" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border rounded-lg text-center font-bold" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Unidad (ej. nmoles) *</label>
-                      <input name="unit" defaultValue={editingItem?.unit || 'nmoles'} required className="w-full p-3 border rounded-lg text-center" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-blue-500 uppercase mb-1">Enlace de Pedido</label>
-                    <input name="purchaseLink" defaultValue={editingItem?.purchaseLink} type="url" placeholder="https://..." className="w-full p-3 border rounded-lg outline-none" />
-                  </div>
-                </div>
-
-                <button type="submit" className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl mt-4 hover:bg-emerald-700 shadow-md">Guardar Oligo</button>
-              </form>
-            </div>
-          )}
-
-          {/* Lista de Oligos */}
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-4 border-b border-gray-100 bg-gray-50">
-               <div className="flex items-center gap-2 bg-white p-2 rounded-xl border">
-                 <Search className="text-gray-400 mx-2" size={20} />
-                 <input type="text" placeholder="Buscar oligo por secuencia, catálogo..." className="w-full outline-none font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-               </div>
-            </div>
+          <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-16">
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-6 bg-slate-50/50">
-              {oligos.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.catalogNum?.includes(searchQuery) || i.brand?.toLowerCase().includes(searchQuery.toLowerCase())).map(item => (
-                <div key={item.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden flex flex-col hover:border-emerald-300 transition-colors">
-                  <div className="h-32 bg-gray-100 relative flex items-center justify-center border-b border-gray-100 p-2">
-                    {item.imageUrl ? <img src={item.imageUrl} className="h-full object-contain" /> : <ImageIcon className="text-gray-300" size={48}/>}
+            {/* Buscador y Herramientas */}
+            <div className="bg-white rounded-2xl shadow-md p-4 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border border-gray-100">
+              <div className="flex items-center gap-2 bg-slate-100 p-3 rounded-xl flex-1 w-full focus-within:ring-2 ring-emerald-500 transition-all">
+                <Search className="text-emerald-400 mx-2" size={20} />
+                <input 
+                  type="text" 
+                  placeholder="Buscar por Nombre, Secuencia, Especie, Caja o Marca..." 
+                  className="w-full bg-transparent outline-none font-medium text-gray-700" 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                />
+              </div>
+              {currentUser.isSuperAdmin && (
+                <button onClick={handlePrintAllLabels} className="px-5 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center gap-2 shadow-sm w-full md:w-auto justify-center transition-colors">
+                  <Printer size={18}/> Imprimir Catálogo
+                </button>
+              )}
+            </div>
+
+            {/* Modal Formulario Principal */}
+            {showForm && currentUser.isSuperAdmin && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-fade-in relative border border-emerald-100">
+                  <div className="sticky top-0 bg-white/90 backdrop-blur-md px-6 py-4 border-b flex justify-between items-center z-10">
+                    <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
+                      <Layers className="text-emerald-600"/> {editingItem ? 'Editar Oligo' : 'Registrar Nuevo Oligo'}
+                    </h2>
+                    <button onClick={() => {setShowForm(false); setImagePreview(null); setEditingItem(null);}} className="p-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
                   </div>
-                  <div className="p-4 flex flex-col flex-1">
-                    <h3 className="font-bold text-gray-900 text-base leading-tight mb-2 truncate" title={item.name}>{item.name}</h3>
-                    <div className="space-y-1 text-xs text-gray-600 mb-4 flex-1">
-                      <p><span className="font-bold text-gray-400">Síntesis:</span> {item.brand}</p>
-                      <p><span className="font-bold text-gray-400">Cat:</span> <span className="font-mono bg-gray-100 px-1 rounded">{item.catalogNum || '--'}</span></p>
-                      <p><span className="font-bold text-gray-400">Lote:</span> {item.lotNum || '--'}</p>
-                      <p className={item.expirationDate && new Date(item.expirationDate) < new Date() ? 'text-red-500 font-bold' : ''}><span className="font-bold text-gray-400">Vence:</span> {item.expirationDate || 'N/A'}</p>
+                  
+                  <form onSubmit={handleSave} className="p-6 space-y-6">
+                    <div className="flex flex-col md:flex-row gap-6">
+                      {/* Imagen / Gel */}
+                      <div className="w-full md:w-1/3 space-y-2">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Foto / Comprobación</label>
+                        <div className="h-56 w-full bg-slate-50 border-2 border-dashed border-emerald-200 rounded-2xl flex items-center justify-center overflow-hidden relative hover:bg-emerald-50 transition-colors group">
+                          {imagePreview ? <img src={imagePreview} className="object-cover w-full h-full" /> : 
+                            <div className="text-center text-emerald-300 group-hover:text-emerald-500 transition-colors">
+                              <ImageIcon className="mx-auto mb-2" size={40}/>
+                              <span className="text-sm font-medium">Click para subir</span>
+                            </div>
+                          }
+                          <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                        </div>
+                      </div>
+                      
+                      {/* Datos Principales (Grid) */}
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-emerald-600 uppercase mb-1 tracking-wider">Nombre del Oligo *</label>
+                          <input name="name" placeholder="ej. GAPDH-Fwd, p53-Rev..." defaultValue={editingItem?.name} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white focus:ring-2 ring-emerald-200 outline-none transition-all font-bold text-lg text-gray-800" />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-bold text-emerald-600 uppercase mb-1 tracking-wider">Secuencia (5' -> 3') *</label>
+                          <input name="sequence" placeholder="ATGC..." defaultValue={editingItem?.sequence} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white focus:ring-2 ring-emerald-200 outline-none transition-all font-mono tracking-wider text-sm text-gray-700 uppercase" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Especie *</label>
+                          <input name="species" placeholder="ej. Human, Mouse, General..." defaultValue={editingItem?.species} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition-all" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Marca / Sintetizador *</label>
+                          <input name="brand" placeholder="ej. Sigma, IDT, Thermo..." defaultValue={editingItem?.brand} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition-all" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Catálogo</label>
+                          <input name="catalogNum" defaultValue={editingItem?.catalogNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none font-mono" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Lote</label>
+                          <input name="lotNum" defaultValue={editingItem?.lotNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none font-mono" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-100 pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Ubicacion */}
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2"><MapPin size={18} className="text-emerald-500"/> Localización Físca</h3>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Equipo / Refrigerador *</label>
+                          <input name="locationLab" placeholder="ej. Refri -20°C Pasillo A" defaultValue={editingItem?.locationLab} required className="w-full p-3 border border-slate-200 rounded-xl focus:border-emerald-500 outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Caja / Posición *</label>
+                          <input name="locationBox" placeholder="ej. Caja Oligos 2, Pos. B4" defaultValue={editingItem?.locationBox} required className="w-full p-3 border border-slate-200 rounded-xl focus:border-emerald-500 outline-none" />
+                        </div>
+                      </div>
+
+                      {/* Cantidad y Notas */}
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-teal-600 uppercase mb-1 tracking-wider">Cantidad Actual *</label>
+                            <input type="number" step="0.01" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-teal-700 focus:border-teal-500 outline-none bg-teal-50" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Unidad *</label>
+                            <input name="unit" placeholder="ej. nmoles, µL" defaultValue={editingItem?.unit || 'nmoles'} required className="w-full p-3 border border-slate-200 rounded-xl text-center outline-none" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-orange-500 uppercase mb-1 tracking-wider">Caducidad (Opcional)</label>
+                          <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3 border border-slate-200 rounded-xl focus:border-emerald-500 outline-none" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Enlace de Pedido</label>
+                          <input name="purchaseLink" defaultValue={editingItem?.purchaseLink} type="url" placeholder="https://..." className="w-full p-3 border border-slate-200 rounded-xl outline-none" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Notas / Observaciones */}
+                    <div className="border-t border-slate-100 pt-6">
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider"><FileText size={14} className="inline mr-1"/>Notas / Observaciones de Uso</label>
+                       <textarea name="notes" defaultValue={editingItem?.notes} rows="2" placeholder="Ej. Resuspendido en agua libre de nucleasas. Tm = 60°C." className="w-full p-3 border border-slate-200 rounded-xl focus:border-emerald-500 outline-none resize-none"></textarea>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 -mx-6 -mb-6 mt-6 rounded-b-3xl border-t">
+                      <button type="submit" className="w-full py-4 bg-emerald-600 text-white font-black text-lg rounded-xl hover:bg-emerald-700 shadow-lg hover:shadow-emerald-500/30 transition-all">Guardar Oligo en Inventario</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de Uso (Descontar Acuota) */}
+            {consumeItem && (
+               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-fade-in overflow-hidden border border-teal-100">
+                    <div className="bg-teal-600 p-6 text-white text-center">
+                      <Activity className="mx-auto mb-2 opacity-80" size={40}/>
+                      <h2 className="text-2xl font-black">Registrar Uso</h2>
+                      <p className="text-teal-100 font-medium">{consumeItem.name}</p>
+                    </div>
+                    <form onSubmit={handleConsumeSubmit} className="p-6 space-y-5">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center flex justify-between items-center">
+                        <span className="text-sm font-bold text-gray-500 uppercase">Disponible:</span>
+                        <span className="text-2xl font-black text-teal-700">{consumeItem.qty} <span className="text-sm text-gray-500">{consumeItem.unit}</span></span>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Cantidad a tomar ({consumeItem.unit}) *</label>
+                        <input type="number" step="0.01" name="amount" required max={consumeItem.qty} className="w-full p-4 border border-slate-200 rounded-xl text-center text-xl font-bold focus:border-teal-500 focus:ring-2 ring-teal-200 outline-none" placeholder="0.00" />
+                      </div>
+                      
+                      <div>
+                         <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Proyecto o Motivo *</label>
+                         <textarea name="reason" required rows="2" className="w-full p-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none resize-none" placeholder="Ej. Preparación de mix PCR para 20 rxns, Proyecto Dr. Smith"></textarea>
+                      </div>
+
+                      <div className="flex gap-3 pt-4">
+                        <button type="button" onClick={() => setConsumeItem(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
+                        <button type="submit" className="flex-1 py-3 bg-teal-600 text-white font-bold rounded-xl hover:bg-teal-700 shadow-md shadow-teal-500/20 transition-all">Confirmar Uso</button>
+                      </div>
+                    </form>
+                  </div>
+               </div>
+            )}
+
+            {/* Modal de Historial */}
+            {showHistory && (
+               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in border border-emerald-100">
+                    <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-3xl">
+                      <div>
+                        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                          <History className="text-emerald-600"/> Historial de Movimientos
+                        </h2>
+                        <p className="text-sm font-medium text-slate-500 mt-1">{showHistory.name}</p>
+                      </div>
+                      <button onClick={() => setShowHistory(null)} className="p-2 bg-white border shadow-sm text-gray-600 hover:bg-gray-100 rounded-full transition-colors"><X size={20}/></button>
                     </div>
                     
-                    <div className="flex items-end justify-between pt-3 border-t border-gray-100">
+                    <div className="flex-1 p-6 overflow-y-auto bg-white">
+                      {oligoLogs.filter(log => log.itemId === showHistory.id).length === 0 ? (
+                        <div className="text-center py-10 text-gray-400">
+                          <Clock className="mx-auto mb-3 opacity-50" size={40}/>
+                          <p>No hay registros de movimientos aún.</p>
+                        </div>
+                      ) : (
+                        <div className="relative border-l-2 border-emerald-100 ml-3 md:ml-4 space-y-6 pb-4">
+                          {oligoLogs.filter(log => log.itemId === showHistory.id)
+                            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
+                            .map(log => (
+                            <div key={log.id} className="relative pl-6 md:pl-8">
+                              {/* Timeline dot */}
+                              <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ${log.action === 'consumido' ? 'bg-orange-500' : log.action === 'creado' ? 'bg-teal-500' : 'bg-blue-500'}`}></div>
+                              
+                              <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-emerald-200 transition-colors">
+                                <div className="flex justify-between items-start mb-2">
+                                  <span className={`text-xs font-black uppercase tracking-wider px-2 py-1 rounded-md ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} ${log.unit}`}
+                                  </span>
+                                  <span className="text-xs font-medium text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(log.timestamp)}</span>
+                                </div>
+                                <p className="text-slate-700 text-sm font-medium mb-2">{log.details}</p>
+                                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+                                  <User size={12}/> {log.userEmail}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+               </div>
+            )}
+
+            {/* Grid de Oligos */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {oligos.filter(i => 
+                  i.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                  (i.sequence && i.sequence.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                  i.catalogNum?.includes(searchQuery) || 
+                  i.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  i.species?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  i.locationBox?.toLowerCase().includes(searchQuery.toLowerCase())
+                ).map(item => (
+                <div key={item.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-emerald-300 transition-all duration-300 flex flex-col overflow-hidden group relative">
+                  
+                  {/* Badges de Identificación Top */}
+                  <div className="absolute top-3 right-3 flex flex-col gap-1 items-end z-10">
+                    <span className="bg-emerald-600/90 backdrop-blur text-white text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border border-emerald-500/50">Especie: {item.species || 'N/A'}</span>
+                  </div>
+
+                  {/* Imagen (Opcional) */}
+                  {item.imageUrl && (
+                    <div className="h-28 bg-slate-50 relative flex items-center justify-center p-2 border-b border-slate-100">
+                      <img src={item.imageUrl} className="h-full object-contain mix-blend-multiply drop-shadow-md group-hover:scale-110 transition-transform duration-500" />
+                    </div>
+                  )}
+                  
+                  <div className="p-5 flex flex-col flex-1">
+                    {/* Título Principal */}
+                    <h3 className="font-black text-gray-900 text-lg leading-tight mb-2 pr-2 truncate" title={item.name}>
+                      {item.name}
+                    </h3>
+
+                    {/* Secuencia destacada */}
+                    {item.sequence && (
+                      <div className="mb-4 bg-slate-100/80 p-2 rounded-lg border border-slate-200">
+                        <p className="text-[9px] uppercase font-bold text-slate-400 mb-0.5">Secuencia (5'-3')</p>
+                        <p className="font-mono text-xs text-emerald-800 break-all font-bold tracking-widest">{item.sequence}</p>
+                      </div>
+                    )}
+                    
+                    {/* Metadatos */}
+                    <div className="space-y-2 text-xs text-gray-600 mb-4 flex-1">
+                      <p className="flex justify-between border-b border-slate-50 pb-1"><span className="font-bold text-slate-400">Marca</span> <span className="font-medium text-slate-700">{item.brand}</span></p>
+                      <p className="flex justify-between border-b border-slate-50 pb-1"><span className="font-bold text-slate-400">Catálogo</span> <span className="font-mono bg-slate-100 px-1 rounded text-slate-700">{item.catalogNum || '--'}</span></p>
+                      
+                      {/* Localización */}
+                      <div className="mt-3 bg-teal-50/50 p-2 rounded-lg border border-teal-50">
+                        <p className="text-[10px] uppercase font-bold text-teal-500 flex items-center gap-1 mb-1"><MapPin size={12}/> Ubicación</p>
+                        <p className="font-medium text-teal-900 truncate" title={item.locationLab}>{item.locationLab || 'No especificado'}</p>
+                        <p className="font-bold text-teal-700">{item.locationBox || '--'}</p>
+                      </div>
+
+                      {/* Notas Collapsible (if exists) */}
+                      {item.notes && (
+                         <div className="mt-2 text-slate-500 bg-slate-50 p-2 rounded-lg text-[11px] line-clamp-2" title={item.notes}>
+                            <span className="font-bold text-slate-700 block mb-0.5"><FileText size={10} className="inline mr-1"/>Notas:</span>
+                            {item.notes}
+                         </div>
+                      )}
+                    </div>
+                    
+                    {/* Footer Actions & Stock */}
+                    <div className="flex items-end justify-between pt-4 border-t border-slate-100 mt-2">
                       <div>
-                        <p className="text-[10px] text-gray-400 uppercase font-bold">Disponible</p>
-                        <p className="text-xl font-black text-emerald-700">{item.qty} <span className="text-sm font-medium text-gray-500">{item.unit}</span></p>
+                        <p className="text-[10px] text-slate-400 uppercase font-bold">Disponible</p>
+                        <p className="text-2xl font-black text-teal-600">{item.qty} <span className="text-xs font-bold text-slate-500">{item.unit}</span></p>
                       </div>
-                      <div className="flex gap-1">
-                        {item.purchaseLink && (
-                          <a href={item.purchaseLink} target="_blank" className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Comprar"><ExternalLink size={16}/></a>
-                        )}
-                        {currentUser.isSuperAdmin && (
-                          <>
-                            <button onClick={()=>{setEditingItem(item); setImagePreview(item.imageUrl); setShowForm(true);}} className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-200"><Settings size={16}/></button>
-                            <button onClick={()=>handleDelete(item.id)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
-                          </>
-                        )}
-                      </div>
+                      
+                      {currentUser && (
+                        <div className="flex gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                          {/* Botón Consumir */}
+                          <button onClick={() => setConsumeItem(item)} className="p-2 bg-teal-100 text-teal-700 rounded-lg hover:bg-teal-200 transition-colors shadow-sm" title="Registrar Uso / Descontar">
+                            <MinusCircle size={18}/>
+                          </button>
+                          {/* Botón Historial */}
+                          <button onClick={() => setShowHistory(item)} className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors shadow-sm" title="Ver Historial de Uso">
+                            <History size={18}/>
+                          </button>
+
+                          {currentUser.isSuperAdmin && (
+                            <>
+                              <button onClick={()=>{setEditingItem(item); setImagePreview(item.imageUrl); setShowForm(true);}} className="p-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"><Settings size={18}/></button>
+                              <button onClick={()=>handleDelete(item.id, item.name)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"><Trash2 size={18}/></button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
+            
+            {oligos.length === 0 && !loading && (
+               <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
+                  <Layers className="mx-auto text-slate-300 mb-4" size={64}/>
+                  <h3 className="text-xl font-bold text-slate-500">No hay oligos registrados</h3>
+                  <p className="text-slate-400 mt-2">Los elementos que agregues aparecerán aquí.</p>
+               </div>
+            )}
+            
           </div>
         </div>
       );
