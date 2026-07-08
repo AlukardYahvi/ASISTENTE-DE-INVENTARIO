@@ -22,27 +22,25 @@
     import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-    import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+    import { getAuth, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
     import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
     import * as LucideIcons from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
 
-    const { Search, Plus, Minus, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, AlignLeft } = LucideIcons;
+    const { Search, Plus, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, AlignLeft, X } = LucideIcons;
 
-    // --- CONFIGURACIÓN FIREBASE (Misma que la app principal) ---
-    const firebaseConfig = {
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
       apiKey: "AIzaSyDeaQnmO8nRG4stRrbnmONaz_k1EUWqVHc",
       authDomain: "asistente-de-inventario.firebaseapp.com",
       projectId: "asistente-de-inventario",
       storageBucket: "asistente-de-inventario.firebasestorage.app",
       messagingSenderId: "972615078649",
-      appId: "1:972615078649:web:a803b9bd801a2481688828",
-      measurementId: "G-MTYN0VSK14"
+      appId: "1:972615078649:web:a803b9bd801a2481688828"
     };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const appId = 'lab-manager-yahvi';
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'lab-manager-yahvi';
 
     const SUPER_ADMIN_EMAILS = [
       'yahvi.edsel.hernandez@gmail.com',
@@ -60,23 +58,43 @@
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
+        const initAuth = async () => {
+          try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await signInWithCustomToken(auth, __initial_auth_token);
+            }
+          } catch (err) { console.error(err); }
+        };
+        initAuth();
+
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           if (user) {
-            setCurrentUser({
-              uid: user.uid, email: user.email, isSuperAdmin: SUPER_ADMIN_EMAILS.includes(user.email)
-            });
-          } else { setCurrentUser(null); }
+            setCurrentUser({ uid: user.uid, email: user.email, isSuperAdmin: user.email ? SUPER_ADMIN_EMAILS.includes(user.email) : false });
+          } else { 
+            setCurrentUser(null);
+            setLoading(false);
+          }
         });
-
-        // Apuntar a la sub-colección de Oligos
-        const invRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_oligos');
-        const unsubInv = onSnapshot(invRef, (snapshot) => {
-          setOligos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          setLoading(false);
-        });
-
-        return () => { unsubscribeAuth(); unsubInv(); };
+        return () => unsubscribeAuth();
       }, []);
+
+      useEffect(() => {
+        if (!currentUser) return;
+
+        const invRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_oligos');
+        const unsubInv = onSnapshot(invRef, 
+          (snapshot) => {
+            setOligos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setLoading(false);
+          },
+          (error) => {
+            console.error("Error al escuchar cambios: ", error);
+            setLoading(false);
+          }
+        );
+
+        return () => unsubInv();
+      }, [currentUser]);
 
       const handleImageUpload = (e) => {
         const file = e.target.files[0];
@@ -99,7 +117,7 @@
 
       const handleSave = async (e) => {
         e.preventDefault();
-        if (!currentUser?.isSuperAdmin) return alert("Solo los administradores autorizados pueden añadir elementos.");
+        if (!currentUser || !currentUser.isSuperAdmin) return alert("Solo los administradores autorizados pueden añadir elementos.");
         
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
@@ -162,7 +180,7 @@
               <div className="absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-black text-gray-800">{editingItem ? 'Editar Oligo' : 'Nuevo Oligo'}</h2>
-                <button onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20}/></button>
+                <button onClick={() => {setShowForm(false); setImagePreview(null); setEditingItem(null);}} className="p-2 hover:bg-gray-100 rounded-full"><X size={20}/></button>
               </div>
               <form onSubmit={handleSave} className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-6">
