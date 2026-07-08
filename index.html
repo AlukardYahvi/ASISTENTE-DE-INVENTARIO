@@ -493,6 +493,23 @@
             </div>
             
             <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
+
+              <button onClick={() => setActiveTab('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'orders' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><CreditCard size={20} /> Compras y Pedidos</button>
+
+         
+              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Inventarios Específicos</p>
+              
+              <a href="inventario_anticuerpos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
+                <Beaker size={20} /> Inv. Anticuerpos
+              </a>
+              
+              <a href="inventario_oligos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
+                <Layers size={20} /> Inv. Oligos
+              </a>
+             
+
+              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
+              
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-2">Navegación</p>
               <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Dashboard General</button>
               <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><Folder size={20} /> Catálogo de Inventario</button>
