@@ -131,7 +131,7 @@
         reader.readAsDataURL(file);
       };
 
-      const logAction = async (itemId, itemName, action, details, amountTaken = 0, unit = '') => {
+      const logAction = async (itemId, itemName, action, details, amountTaken = 0) => {
         try {
           const logId = `log_${Date.now()}_${Math.floor(Math.random()*1000)}`;
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos_logs', logId), {
@@ -140,7 +140,7 @@
             action,
             details,
             amountTaken,
-            unit,
+            unit: 'viales', // Forzamos viales para la BD
             userEmail: currentUser.email,
             timestamp: new Date().toISOString()
           });
@@ -155,7 +155,7 @@
         
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
-        data.qty = Number(data.qty);
+        data.qty = parseInt(data.qty, 10); // Parsear a número entero
         data.imageUrl = imagePreview || editingItem?.imageUrl || '';
         data.sequence = data.sequence.toUpperCase().replace(/\s/g, ''); // Normalizar secuencia
 
@@ -183,11 +183,11 @@
       const handleConsumeSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
-        const amountToTake = Number(formData.get('amount'));
+        const amountToTake = parseInt(formData.get('amount'), 10);
         const reason = formData.get('reason');
 
         if (amountToTake <= 0) return alert("Ingresa una cantidad válida.");
-        if (amountToTake > consumeItem.qty) return alert("No hay suficiente cantidad en inventario.");
+        if (amountToTake > consumeItem.qty) return alert("No hay suficientes viales en inventario.");
 
         const newQty = consumeItem.qty - amountToTake;
 
@@ -199,8 +199,7 @@
             consumeItem.name,
             'consumido',
             reason,
-            amountToTake,
-            consumeItem.unit
+            amountToTake
           );
 
           setConsumeItem(null);
@@ -405,15 +404,9 @@
 
                       {/* Cantidad y Notas */}
                       <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-bold text-teal-600 uppercase mb-1 tracking-wider">Cantidad Actual *</label>
-                            <input type="number" step="0.01" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-teal-700 focus:border-teal-500 outline-none bg-teal-50" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Unidad *</label>
-                            <input name="unit" placeholder="ej. nmoles, µL" defaultValue={editingItem?.unit || 'nmoles'} required className="w-full p-3 border border-slate-200 rounded-xl text-center outline-none" />
-                          </div>
+                        <div>
+                          <label className="block text-xs font-bold text-teal-600 uppercase mb-1 tracking-wider">Número de Viales *</label>
+                          <input type="number" step="1" min="0" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-teal-700 focus:border-teal-500 outline-none bg-teal-50" />
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-orange-500 uppercase mb-1 tracking-wider">Caducidad (Opcional)</label>
@@ -451,13 +444,13 @@
                     </div>
                     <form onSubmit={handleConsumeSubmit} className="p-6 space-y-5">
                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center flex justify-between items-center">
-                        <span className="text-sm font-bold text-gray-500 uppercase">Disponible:</span>
-                        <span className="text-2xl font-black text-teal-700">{consumeItem.qty} <span className="text-sm text-gray-500">{consumeItem.unit}</span></span>
+                        <span className="text-sm font-bold text-gray-500 uppercase">Viales Disponibles:</span>
+                        <span className="text-2xl font-black text-teal-700">{consumeItem.qty}</span>
                       </div>
                       
                       <div>
-                        <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Cantidad a tomar ({consumeItem.unit}) *</label>
-                        <input type="number" step="0.01" name="amount" required max={consumeItem.qty} className="w-full p-4 border border-slate-200 rounded-xl text-center text-xl font-bold focus:border-teal-500 focus:ring-2 ring-teal-200 outline-none" placeholder="0.00" />
+                        <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Viales a dar de baja *</label>
+                        <input type="number" step="1" min="1" name="amount" required max={consumeItem.qty} className="w-full p-4 border border-slate-200 rounded-xl text-center text-xl font-bold focus:border-teal-500 focus:ring-2 ring-teal-200 outline-none" placeholder="1" />
                       </div>
                       
                       <div>
@@ -506,7 +499,7 @@
                               <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-emerald-200 transition-colors">
                                 <div className="flex justify-between items-start mb-2">
                                   <span className={`text-xs font-black uppercase tracking-wider px-2 py-1 rounded-md ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} ${log.unit}`}
+                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} vial(es)`}
                                   </span>
                                   <span className="text-xs font-medium text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(log.timestamp)}</span>
                                 </div>
@@ -595,7 +588,7 @@
                       <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                         <div>
                           <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Disponible</p>
-                          <p className="font-black text-teal-700 text-lg">{oligo.qty} <span className="text-sm font-medium text-gray-500">{oligo.unit}</span></p>
+                          <p className="font-black text-teal-700 text-lg">{oligo.qty} <span className="text-sm font-medium text-gray-500">vial{oligo.qty !== 1 ? 'es' : ''}</span></p>
                         </div>
                         
                         <div className="flex gap-2">
