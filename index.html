@@ -38,7 +38,8 @@
       Camera, Keyboard, CheckCircle2, PackageSearch, MapPin, History,
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
-      Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2
+      Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2,
+      Dna, TestTubes // Íconos para sub-inventarios
     } = LucideIcons;
 
     const MIS_CREDENCIALES_FIREBASE = {
@@ -100,7 +101,7 @@
       const [cameraActive, setCameraActive] = useState(false);
       const [cameraActiveForm, setCameraActiveForm] = useState(false);
       const [viewMode, setViewMode] = useState('table');
-      const [formStockType, setFormStockType] = useState('unit'); // NUEVO: Estado para controlar el tipo de stock en el formulario
+      const [formStockType, setFormStockType] = useState('unit');
       
       const scannerInputRef = useRef(null);
       const hiddenSubmitBtnRef = useRef(null);
@@ -445,7 +446,7 @@
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}_${Math.floor(Math.random()*1000)}`), {
             itemId: scannedItem.id, itemName: scannedItem.name, action: scanAction, amount: scanAmount,
             reason: scanAction === 'add' ? 'Reabastecimiento manual' : scanReason,
-            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString(), project: scannedItem.project || 'General'
+            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
           });
           setScannedItem({ ...scannedItem, qty: newQty });
           setScanAction('info');
@@ -493,23 +494,6 @@
             </div>
             
             <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
-
-              <button onClick={() => setActiveTab('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'orders' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><CreditCard size={20} /> Compras y Pedidos</button>
-
-         
-              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Inventarios Específicos</p>
-              
-              <a href="inventario_anticuerpos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <Beaker size={20} /> Inv. Anticuerpos
-              </a>
-              
-              <a href="inventario_oligos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <Layers size={20} /> Inv. Oligos
-              </a>
-             
-
-              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
-              
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-2">Navegación</p>
               <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Dashboard General</button>
               <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><Folder size={20} /> Catálogo de Inventario</button>
@@ -517,6 +501,17 @@
               
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Módulos Especializados</p>
               <button onClick={() => setActiveTab('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'orders' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><CreditCard size={20} /> Compras y Pedidos</button>
+
+              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Inventarios Específicos</p>
+              <a href="inventario_anticuerpos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
+                <TestTubes size={20} /> Inv. Anticuerpos
+              </a>
+              <a href="inventario_oligos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
+                <Dna size={20} /> Inv. Oligos
+              </a>
+              <a href="inventario_muestras.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
+                <LayoutGrid size={20} /> Cajas y Muestras
+              </a>
 
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
               <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white border border-slate-600' : 'hover:bg-slate-800'}`}><ClipboardSignature size={20} /> Historial Operativo</button>
@@ -547,6 +542,7 @@
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''}><LayoutDashboard/></button>
                 <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-400' : ''}><Folder/></button>
                 <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''}><ScanLine/></button>
+                <a href="inventario_muestras.html" title="Cajas y Muestras" className="text-gray-400 hover:text-blue-400"><LayoutGrid size={24}/></a>
               </div>
             </header>
 
