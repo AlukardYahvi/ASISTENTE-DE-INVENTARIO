@@ -16,66 +16,74 @@
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     
-    /* Grid dinámico de ultra-alta calidad para las cajas */
-    .box-grid-container {
-      background: linear-gradient(145deg, #f8fafc, #f1f5f9);
+    /* --- DISEÑO PREMIUM DEL RACK (CAJA) --- */
+    .rack-container {
+      background: linear-gradient(145deg, #1e293b, #0f172a);
       border-radius: 16px;
-      padding: 16px;
-      border: 1px solid #e2e8f0;
-      box-shadow: inset 0 4px 10px rgba(0,0,0,0.03), 0 10px 25px -5px rgba(0,0,0,0.05);
+      padding: 24px;
+      border: 1px solid #334155;
+      box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5), inset 0 2px 10px rgba(255,255,255,0.05);
       width: max-content;
       margin: 0 auto;
     }
-    .box-grid { display: grid; gap: 8px; width: max-content; }
     
-    .box-cell { 
-      width: 44px; height: 44px; border-radius: 50%; background: #ffffff; 
-      border: 2px solid #e2e8f0; 
+    .rack-grid { display: grid; gap: 10px; width: max-content; }
+    
+    .rack-cell { 
+      width: 46px; height: 46px; border-radius: 50%; 
+      background: #0b0f19; /* Agujero vacío */
+      border: 2px solid #334155; 
       display: flex; align-items: center; justify-content: center; 
-      font-size: 11px; font-weight: 800; cursor: pointer; color: #94a3b8;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; 
-      box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+      font-size: 11px; font-weight: 800; cursor: pointer; color: #475569;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); position: relative; 
+      box-shadow: inset 0 6px 10px rgba(0,0,0,0.8);
     }
     
-    .box-cell:hover { 
-      transform: translateY(-3px) scale(1.05); z-index: 10; 
-      border-color: #6366f1; color: #6366f1;
-      box-shadow: 0 8px 15px rgba(99,102,241,0.2); 
+    .rack-cell:hover { 
+      transform: translateY(-4px) scale(1.1); z-index: 10; 
+      border-color: #60a5fa; color: #60a5fa;
+      box-shadow: inset 0 6px 10px rgba(0,0,0,0.8), 0 10px 15px rgba(59,130,246,0.3); 
     }
     
-    .box-cell.filled { 
-      border-color: transparent; color: #fff; 
-      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-      box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2), 0 4px 6px rgba(0,0,0,0.1);
+    /* Tubo lleno */
+    .rack-cell.filled { 
+      background: radial-gradient(circle at 30% 30%, #ffffff, #e2e8f0);
+      border-color: #cbd5e1; 
+      color: transparent; /* Ocultar texto al estar lleno para verse más limpio */
+      box-shadow: 0 4px 8px rgba(0,0,0,0.5), inset 0 -4px 8px rgba(0,0,0,0.1);
+    }
+
+    /* Punto de color dentro del tubo lleno */
+    .rack-cell.filled::after {
+      content: '';
+      position: absolute;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--tube-color, #3b82f6);
+      box-shadow: inset 0 2px 4px rgba(255,255,255,0.4), inset 0 -2px 4px rgba(0,0,0,0.2);
     }
     
-    .box-cell.selected { 
+    .rack-cell.selected { 
       border-color: #10b981; 
-      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2), 0 8px 15px rgba(0,0,0,0.1); 
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3), 0 10px 20px rgba(0,0,0,0.4); 
       transform: scale(1.15); z-index: 20; 
-      color: #10b981;
-    }
-    .box-cell.filled.selected {
-      color: #fff;
-      border: 3px solid #10b981;
     }
     
-    .row-label, .col-label { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #64748b; }
-    .glass-panel { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.5); }
+    .row-label, .col-label { display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; color: #94a3b8; text-shadow: 0 2px 4px rgba(0,0,0,0.5);}
   </style>
 </head>
 <body class="bg-slate-100 text-gray-900 font-sans h-screen overflow-hidden flex flex-col">
   <div id="root" class="h-full"></div>
 
   <script type="text/babel" data-type="module">
-    import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
+    import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import { getAuth, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-    import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+    import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
     import * as LucideIcons from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
 
-    const { Search, Plus, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, LayoutGrid, List, Key, Beaker, X, Printer, Save, ScanLine, Camera, Droplet, Copy, Info, CheckCircle2, CheckSquare, ClipboardCopy, ClipboardPaste, PrinterIcon } = LucideIcons;
+    const { Search, Plus, Settings, Trash2, ArrowLeft, Image: ImageIcon, ShieldAlert, LayoutGrid, List, Key, Beaker, X, Printer, Save, ScanLine, Camera, Droplet, ClipboardCopy, ClipboardPaste, PrinterIcon, User } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
       apiKey: "AIzaSyDeaQnmO8nRG4stRrbnmONaz_k1EUWqVHc",
@@ -91,29 +99,25 @@
     const db = getFirestore(app);
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'lab-manager-yahvi';
 
-    const MASTER_EMAILS = [
-      'yahvi.edsel.hernandez@gmail.com',
-      'asistentelicam@gmail.com',
-      'nnajerag@ipn.mx',
-      'cgomezm310393@gmail.com'
-    ];
+    // EL ÚNICO SUPERADMINISTRADOR (TÚ)
+    const MASTER_EMAIL = 'yahvi.edsel.hernandez@gmail.com';
 
     const getRowLabel = (index) => String.fromCharCode(65 + index);
     const generateSampleCode = () => `SMP-${Date.now().toString(36).toUpperCase().slice(-4)}-${Math.random().toString(36).substr(2,3).toUpperCase()}`;
 
-    // --- Componente: Tubo Dinámico (Cambia de forma según el tipo) ---
+    // --- Componente: Tubo Dinámico ---
     const TubeVisual = ({ color, isEmpty, type }) => {
       const hexColor = color ? color.replace('#', '') : 'e2e8f0';
       const liquidColor = isEmpty ? 'transparent' : color;
       const isCryo = type?.includes('Criovial');
       
       return (
-        <svg viewBox="0 0 100 200" className="w-28 h-56 mx-auto drop-shadow-2xl transition-all duration-300 transform hover:scale-105">
+        <svg viewBox="0 0 100 200" className="w-24 h-48 drop-shadow-2xl transition-all duration-300 mx-auto">
           <defs>
             <linearGradient id={`liquid-${hexColor}`} x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor={liquidColor} stopOpacity="0.7" />
-              <stop offset="50%" stopColor={liquidColor} stopOpacity="0.9" />
-              <stop offset="100%" stopColor={liquidColor} stopOpacity="0.6" />
+              <stop offset="0%" stopColor={liquidColor} stopOpacity="0.8" />
+              <stop offset="50%" stopColor={liquidColor} stopOpacity="1" />
+              <stop offset="100%" stopColor={liquidColor} stopOpacity="0.7" />
             </linearGradient>
             <linearGradient id="glass-shine" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
@@ -126,7 +130,7 @@
           <path d="M 15 20 Q 50 15 85 20 L 88 35 L 12 35 Z" fill={isCryo ? "#f59e0b" : "#cbd5e1"} stroke="#64748b" strokeWidth="2"/>
           <path d="M 28 8 L 72 8 L 75 20 L 25 20 Z" fill={isCryo ? "#fbbf24" : "#94a3b8"} stroke="#64748b" strokeWidth="1"/>
           
-          {/* Cuerpo del tubo: Cono (Eppendorf/Falcon) vs Redondo (Criovial) */}
+          {/* Cuerpo */}
           {isCryo ? (
             <path d="M 22 35 L 78 35 L 78 175 Q 78 190 50 190 Q 22 190 22 175 Z" fill="rgba(255,255,255,0.4)" stroke="#94a3b8" strokeWidth="2.5"/>
           ) : (
@@ -142,14 +146,14 @@
             )
           )}
 
-          {/* Brillo del cristal */}
+          {/* Brillo */}
           {isCryo ? (
             <path d="M 24 38 L 40 38 L 40 170 Q 40 180 30 180 Z" fill="url(#glass-shine)" />
           ) : (
             <path d="M 24 38 L 40 38 L 38 160 Q 30 170 28 162 Z" fill="url(#glass-shine)" />
           )}
 
-          {/* Marcas de volumen medidoras */}
+          {/* Marcas de volumen */}
           <g stroke="#94a3b8" strokeWidth="1.5" opacity="0.7">
             <line x1="26" y1="60" x2="36" y2="60" />
             <line x1="25" y1="90" x2="42" y2="90" strokeWidth="2" />
@@ -176,7 +180,6 @@
       const [searchQuery, setSearchQuery] = useState('');
       const [scanInput, setScanInput] = useState('');
 
-      // --- ESTADOS PARA EDICIÓN MÚLTIPLE (EXCEL) ---
       const [selectedTableCells, setSelectedTableCells] = useState([]);
       const [clipboardData, setClipboardData] = useState(null);
 
@@ -192,12 +195,15 @@
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
           if (user) {
-            const isMaster = MASTER_EMAILS.includes(user.email);
+            const isMaster = user.email === MASTER_EMAIL;
+            
+            // Validar autorizaciones
             const authRef = collection(db, 'artifacts', appId, 'public', 'data', 'biobanco_auth');
             onSnapshot(authRef, (snapshot) => {
               const authList = snapshot.docs.map(d => d.data().email);
               setAuthorizedUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
               const isAuthorized = isMaster || authList.includes(user.email);
+              
               setCurrentUser({ uid: user.uid, email: user.email, isMaster, isAuthorized });
               setLoading(false);
             });
@@ -209,10 +215,19 @@
         return () => unsubscribeAuth();
       }, []);
 
+      // Cargar Cajas (Filtrado por usuario, o todas si es MASTER)
       useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser || !currentUser.isAuthorized) return;
+        
         const boxesRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_cajas_muestras');
-        const unsubBoxes = onSnapshot(boxesRef, (snapshot) => {
+        let q = boxesRef;
+        
+        // Si no es master, solo ve sus propias cajas
+        if (!currentUser.isMaster) {
+          q = query(boxesRef, where('owner', '==', currentUser.email));
+        }
+
+        const unsubBoxes = onSnapshot(q, (snapshot) => {
           setBoxes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
         return () => unsubBoxes();
@@ -221,7 +236,7 @@
       // --- FUNCIONES DE CAJA Y CELDAS ---
       const handleCreateBox = async (e) => {
         e.preventDefault();
-        if (!currentUser.isAuthorized) return alert("No estás autorizado para crear cajas.");
+        if (!currentUser.isAuthorized) return alert("No estás autorizado.");
         const fd = new FormData(e.target);
         const newBox = {
           name: fd.get('name'),
@@ -239,9 +254,10 @@
         } catch(err) { alert(err.message); }
       };
 
-      const handleDeleteBox = async (id, name) => {
-        if (!currentUser.isMaster) return alert("Solo los superadministradores pueden eliminar cajas completas.");
-        if (window.confirm(`⚠️ ADVERTENCIA: Vas a eliminar la caja "${name}" y TODAS las muestras que contiene. ¿Estás absolutamente seguro?`)) {
+      const handleDeleteBox = async (id, name, owner) => {
+        // Solo puede borrar si es Master, o si es el dueño de la caja
+        if (!currentUser.isMaster && currentUser.email !== owner) return alert("No tienes permiso para eliminar cajas de otros.");
+        if (window.confirm(`⚠️ ADVERTENCIA: Vas a eliminar permanentemente la caja "${name}" y TODAS las muestras que contiene.\n\n¿Estás absolutamente seguro?`)) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_cajas_muestras', id));
           if (selectedBox?.id === id) setActiveTab('catalog');
         }
@@ -253,13 +269,13 @@
         setSelectedCellId(null);
         setSelectedTableCells([]);
         setActiveTab('box_view');
+        setViewMode('visual');
       };
 
       const saveBoxCells = async () => {
-        if (!currentUser.isAuthorized) return alert("Sin permisos de edición.");
         try {
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_cajas_muestras', selectedBox.id), { cells: boxCells }, { merge: true });
-          alert("Base de datos de la caja actualizada correctamente.");
+          alert("Cambios guardados en la base de datos.");
           setSelectedBox({...selectedBox, cells: boxCells});
         } catch(err) { alert(err.message); }
       };
@@ -271,7 +287,7 @@
         }));
       };
 
-      // --- FUNCIONES EXCEL (COPIAR / PEGAR MÚLTIPLE) ---
+      // --- FUNCIONES EXCEL (COPIAR / PEGAR) ---
       const toggleTableCellSelection = (cellId) => {
         setSelectedTableCells(prev => prev.includes(cellId) ? prev.filter(c => c !== cellId) : [...prev, cellId]);
       };
@@ -291,15 +307,15 @@
       };
 
       const handleCopyCells = () => {
-        if (selectedTableCells.length !== 1) return alert("Selecciona exactamente 1 celda para copiar sus características.");
+        if (selectedTableCells.length !== 1) return alert("Selecciona exactamente 1 muestra para copiar sus propiedades.");
         const dataToCopy = boxCells[selectedTableCells[0]];
         if (!dataToCopy || !dataToCopy.name) return alert("La celda seleccionada está vacía.");
         setClipboardData(dataToCopy);
-        alert(`Copiado: ${dataToCopy.name}`);
+        alert(`Propiedades copiadas: ${dataToCopy.name}`);
       };
 
       const handlePasteCells = () => {
-        if (!clipboardData) return alert("No has copiado nada al portapapeles.");
+        if (!clipboardData) return alert("No has copiado nada.");
         if (selectedTableCells.length === 0) return alert("Selecciona al menos una celda de destino.");
         
         const newCells = { ...boxCells };
@@ -310,12 +326,10 @@
             color: clipboardData.color,
             date: clipboardData.date,
             desc: clipboardData.desc,
-            // Genera un código único automático si no tenía uno (para LIMS estricto)
-            code: newCells[id]?.code || generateSampleCode()
+            code: newCells[id]?.code || generateSampleCode() // Genera ID único si es nueva
           };
         });
         setBoxCells(newCells);
-        alert(`Muestra aplicada a ${selectedTableCells.length} celdas.`);
       };
 
       const handleClearCells = () => {
@@ -327,46 +341,7 @@
         }
       };
 
-      // --- IMPRESIÓN ---
-      const handlePrintLabels = (boxMode = false) => {
-        const printWindow = window.open('', '_blank');
-        let html = '';
-
-        if (boxMode) {
-          // Imprimir etiqueta de la CAJA
-          const code = selectedBox.barcode;
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(code)}`;
-          html = `<div class="label-box"><div class="title">CAJA: ${selectedBox.name}</div><img src="${qrUrl}" class="qr"/><div class="meta">${code}</div></div>`;
-        } else {
-          // Imprimir etiquetas de TUBOS seleccionados
-          if (selectedTableCells.length === 0) return alert("Selecciona muestras en la tabla para imprimir.");
-          const itemsToPrint = selectedTableCells.map(id => ({ id, ...boxCells[id] })).filter(c => c.code);
-          if (itemsToPrint.length === 0) return alert("Las celdas seleccionadas no tienen códigos asignados.");
-
-          html = itemsToPrint.map(item => {
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(item.code)}`;
-            return `<div class="label-box"><div class="title">${item.name}</div><img src="${qrUrl}" class="qr"/><div class="meta">${item.code} | Pos: ${item.id}</div></div>`;
-          }).join('');
-        }
-
-        printWindow.document.write(`
-          <html><head><title>Imprimir Etiquetas</title><style>
-            body { font-family: sans-serif; margin: 0; padding: 20px; background: #fff;}
-            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5cm, 1fr)); gap: 15px; }
-            .label-box { border: 1px dashed #666; padding: 10px; display: flex; flex-direction: column; align-items: center; text-align: center; border-radius: 4px; page-break-inside: avoid;}
-            .title { font-size: 11px; font-weight: bold; margin-bottom: 5px; max-width: 100%; overflow: hidden; white-space: nowrap; }
-            .qr { width: 60px; height: 60px; }
-            .meta { font-size: 10px; color: #000; margin-top: 5px; font-family: monospace; font-weight: bold;}
-            @media print { body { padding: 0; } .label-box { border: 1px solid #000; } }
-          </style></head><body>
-            <div class="grid">${html}</div>
-            <script>setTimeout(() => { window.print(); }, 1500); <\/script>
-          </body></html>
-        `);
-        printWindow.document.close();
-      };
-
-      // --- FUNCIONES ADMIN ---
+      // --- FUNCIONES ADMIN DE USUARIOS ---
       const handleAddAuthorizedUser = async (e) => {
         e.preventDefault();
         if (!currentUser.isMaster) return;
@@ -419,14 +394,14 @@
       // --- RENDER ---
       if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-14 w-14 border-t-4 border-b-4 border-indigo-600"></div></div>;
 
-      if (!currentUser) {
+      if (!currentUser || !currentUser.isAuthorized) {
         return (
           <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
             <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-sm w-full">
               <ShieldAlert className="mx-auto text-indigo-500 mb-4" size={56} />
-              <h2 className="text-2xl font-black mb-2 text-slate-800">Acceso a Biobanco</h2>
-              <p className="text-slate-500 mb-8 font-medium">Debes iniciar sesión en la aplicación principal (LabManager) para acceder a este módulo protegido.</p>
-              <a href="index.html" className="block w-full py-4 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30">Ir a LabManager</a>
+              <h2 className="text-2xl font-black mb-2 text-slate-800">Espacio Privado</h2>
+              <p className="text-slate-500 mb-8 font-medium">No tienes un workspace asignado en el Biobanco. Pide acceso al administrador.</p>
+              <a href="index.html" className="block w-full py-4 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors">Volver al Menú Principal</a>
             </div>
           </div>
         );
@@ -434,42 +409,41 @@
 
       return (
         <div className="min-h-screen flex flex-col h-screen">
-          {/* HEADER PREMIUM */}
-          <div className="bg-gradient-to-r from-indigo-800 via-blue-800 to-indigo-900 px-6 py-5 shadow-lg flex-shrink-0 z-10">
+          {/* HEADER */}
+          <div className="bg-white px-6 py-4 shadow-sm border-b border-slate-200 flex-shrink-0 z-10">
             <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-              <div className="flex items-center gap-4 text-white">
-                <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/20 shadow-inner"><LayoutGrid size={28} className="text-blue-200" /></div>
+              <div className="flex items-center gap-4 text-slate-800">
+                <div className="bg-indigo-600 p-2.5 rounded-xl text-white shadow-md"><LayoutGrid size={24} /></div>
                 <div>
-                  <h1 className="text-2xl font-black tracking-tight">Biobanco de Muestras</h1>
-                  <p className="text-xs text-indigo-200 font-medium tracking-wide uppercase mt-0.5">Gestión de Cajas, Viales y Congeladores</p>
+                  <h1 className="text-xl font-black tracking-tight">Workspace Biobanco</h1>
+                  <p className="text-xs text-slate-500 font-medium tracking-wide uppercase mt-0.5">{currentUser.email}</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0 hide-scrollbar">
-                <button onClick={()=>setActiveTab('catalog')} className={`px-5 py-2.5 font-bold rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${activeTab==='catalog'||activeTab==='box_view'?'bg-white text-indigo-800 shadow-md':'bg-white/10 text-white hover:bg-white/20'}`}><LayoutGrid size={18}/> Cajas</button>
-                <button onClick={()=>setActiveTab('scanner')} className={`px-5 py-2.5 font-bold rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${activeTab==='scanner'?'bg-white text-indigo-800 shadow-md':'bg-white/10 text-white hover:bg-white/20'}`}><ScanLine size={18}/> Buscar</button>
+                <button onClick={()=>setActiveTab('catalog')} className={`px-5 py-2.5 font-bold rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${activeTab==='catalog'||activeTab==='box_view'?'bg-indigo-50 text-indigo-700':'text-slate-600 hover:bg-slate-100'}`}><LayoutGrid size={18}/> Mis Cajas</button>
+                <button onClick={()=>setActiveTab('scanner')} className={`px-5 py-2.5 font-bold rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${activeTab==='scanner'?'bg-indigo-50 text-indigo-700':'text-slate-600 hover:bg-slate-100'}`}><ScanLine size={18}/> Buscar</button>
                 {currentUser.isMaster && (
-                  <button onClick={()=>setActiveTab('admin')} className={`px-5 py-2.5 font-bold rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${activeTab==='admin'?'bg-emerald-500 text-white shadow-md':'bg-white/10 text-emerald-300 hover:bg-white/20'}`}><Key size={18}/> Accesos</button>
+                  <button onClick={()=>setActiveTab('admin')} className={`px-5 py-2.5 font-bold rounded-xl whitespace-nowrap transition-all flex items-center gap-2 ${activeTab==='admin'?'bg-purple-100 text-purple-800':'text-purple-600 hover:bg-purple-50'}`}><Key size={18}/> Permisos Generales</button>
                 )}
-                <div className="w-px h-8 bg-white/20 mx-2 hidden sm:block"></div>
-                <a href="index.html" className="px-5 py-2.5 bg-slate-900/50 text-white rounded-xl hover:bg-slate-900 font-bold whitespace-nowrap flex items-center gap-2 transition-all"><ArrowLeft size={16}/> Salir</a>
+                <div className="w-px h-6 bg-slate-200 mx-2 hidden sm:block"></div>
+                <a href="index.html" className="px-5 py-2.5 text-slate-500 hover:text-slate-800 font-bold whitespace-nowrap flex items-center gap-2 transition-all"><ArrowLeft size={16}/> Salir</a>
               </div>
             </div>
           </div>
 
           <div className="flex-1 overflow-hidden flex flex-col bg-slate-50">
+            
             {/* VISTA 1: CATÁLOGO DE CAJAS */}
             {activeTab === 'catalog' && (
               <div className="animate-fade-in flex-1 overflow-y-auto p-4 md:p-8">
                 <div className="max-w-7xl mx-auto">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-                    <div className="bg-white p-2 rounded-2xl border border-slate-200 flex items-center shadow-sm w-full max-w-md focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-                      <Search className="text-indigo-400 mx-3" size={22}/>
-                      <input type="text" placeholder="Buscar caja por nombre o ID..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-full outline-none font-medium text-slate-700 bg-transparent py-1"/>
+                    <div className="bg-white p-2 rounded-2xl border border-slate-200 flex items-center shadow-sm w-full max-w-md focus-within:border-indigo-500 transition-colors">
+                      <Search className="text-slate-400 mx-3" size={22}/>
+                      <input type="text" placeholder="Buscar caja o código..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-full outline-none font-medium text-slate-700 bg-transparent py-1.5"/>
                     </div>
-                    {currentUser.isAuthorized && (
-                      <button onClick={()=>setActiveTab('create_box')} className="px-6 py-3.5 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg shadow-indigo-500/30 flex items-center gap-2 hover:bg-indigo-700 hover:scale-105 transition-all w-full sm:w-auto justify-center"><Plus size={20}/> Registrar Nueva Caja</button>
-                    )}
+                    <button onClick={()=>setActiveTab('create_box')} className="px-6 py-3.5 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg flex items-center gap-2 hover:bg-indigo-700 hover:-translate-y-1 transition-all w-full sm:w-auto justify-center"><Plus size={20}/> Registrar Caja</button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -478,31 +452,35 @@
                        const usedCells = Object.keys(box.cells || {}).filter(k => box.cells[k]?.name).length;
                        const occupancy = Math.round((usedCells / totalCells) * 100) || 0;
                        return (
-                        <div key={box.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 hover:shadow-2xl hover:-translate-y-1 hover:border-indigo-300 transition-all duration-300 flex flex-col relative overflow-hidden group">
+                        <div key={box.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 hover:shadow-xl hover:-translate-y-1 hover:border-indigo-300 transition-all duration-300 flex flex-col relative overflow-hidden group">
                           <div className={`absolute top-0 left-0 w-full h-1.5 ${occupancy === 100 ? 'bg-red-500' : occupancy > 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
                           
                           <div className="flex justify-between items-start mb-5 mt-1 cursor-pointer" onClick={() => openBox(box)}>
                             <div className="bg-indigo-50 text-indigo-600 p-3.5 rounded-2xl group-hover:scale-110 transition-transform"><LayoutGrid size={28}/></div>
-                            <span className="text-xs font-black tracking-wider bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg border border-slate-200 shadow-inner">{box.rows}x{box.cols}</span>
+                            <span className="text-xs font-black tracking-wider bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg border border-slate-200">{box.rows}x{box.cols}</span>
                           </div>
                           
-                          <h3 className="font-black text-slate-800 text-xl mb-1 line-clamp-1 cursor-pointer" title={box.name} onClick={() => openBox(box)}>{box.name}</h3>
-                          <p className="text-xs text-slate-400 font-mono mb-6 bg-slate-50 inline-block px-2 py-1 rounded w-fit">{box.barcode}</p>
+                          <h3 className="font-black text-slate-800 text-xl mb-1 line-clamp-1 cursor-pointer" onClick={() => openBox(box)}>{box.name}</h3>
+                          <p className="text-xs text-slate-400 font-mono mb-6 bg-slate-50 inline-block px-2 py-1 rounded w-fit border border-slate-100">{box.barcode}</p>
                           
                           <div className="mt-auto bg-slate-50 p-4 rounded-2xl border border-slate-100">
                             <div className="flex justify-between text-xs font-bold mb-2">
-                              <span className="text-slate-500 uppercase tracking-wider">Ocupación</span>
+                              <span className="text-slate-500 uppercase">Ocupación</span>
                               <span className={occupancy > 90 ? 'text-red-600' : 'text-indigo-600'}>{occupancy}% ({usedCells}/{totalCells})</span>
                             </div>
-                            <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden shadow-inner">
+                            <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
                               <div className={`h-full rounded-full transition-all duration-1000 ${occupancy > 90 ? 'bg-red-500' : 'bg-indigo-500'}`} style={{width: `${occupancy}%`}}></div>
                             </div>
                             <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-200/60">
                                <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{box.tubeType}</p>
-                               {currentUser.isMaster && (
-                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteBox(box.id, box.name); }} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50" title="Borrar Caja"><Trash2 size={16}/></button>
+                               {/* Solo el dueño o el master pueden borrar */}
+                               {(currentUser.isMaster || currentUser.email === box.owner) && (
+                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteBox(box.id, box.name, box.owner); }} className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors" title="Eliminar Caja Definitivamente"><Trash2 size={16}/></button>
                                )}
                             </div>
+                            {currentUser.isMaster && box.owner !== currentUser.email && (
+                               <p className="text-[9px] text-slate-400 mt-2 flex items-center gap-1"><User size={10}/> Dueño: {box.owner}</p>
+                            )}
                           </div>
                         </div>
                        )
@@ -510,8 +488,8 @@
                     {boxes.length === 0 && (
                       <div className="col-span-full flex flex-col items-center justify-center text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-300">
                         <LayoutGrid size={64} className="text-slate-300 mb-4"/>
-                        <h3 className="text-xl font-bold text-slate-600 mb-2">Aún no hay cajas creadas</h3>
-                        <p className="text-slate-400 max-w-sm">Comienza registrando tu primera caja para organizar tus muestras y viales.</p>
+                        <h3 className="text-xl font-bold text-slate-600 mb-2">Workspace Vacío</h3>
+                        <p className="text-slate-400 max-w-sm">No tienes cajas registradas en tu entorno. Crea la primera para empezar.</p>
                       </div>
                     )}
                   </div>
@@ -520,31 +498,31 @@
             )}
 
             {/* VISTA 2: CREADOR DE CAJAS */}
-            {activeTab === 'create_box' && currentUser.isAuthorized && (
+            {activeTab === 'create_box' && (
               <div className="p-4 md:p-8 flex-1 overflow-y-auto">
-                <div className="bg-white p-8 md:p-10 rounded-[2rem] shadow-2xl border border-slate-100 max-w-2xl mx-auto animate-fade-in w-full">
+                <div className="bg-white p-8 md:p-10 rounded-[2rem] shadow-xl border border-slate-100 max-w-2xl mx-auto animate-fade-in">
                   <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-5">
-                    <h2 className="text-3xl font-black text-slate-800 flex items-center gap-3"><div className="p-2 bg-indigo-100 rounded-xl text-indigo-600"><Plus size={24}/></div> Nueva Caja</h2>
-                    <button onClick={()=>setActiveTab('catalog')} className="p-2.5 bg-slate-50 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-colors"><X size={24}/></button>
+                    <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3"><Plus className="text-indigo-500"/> Diseñar Nueva Caja</h2>
+                    <button onClick={()=>setActiveTab('catalog')} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={24} className="text-slate-400"/></button>
                   </div>
                   <form onSubmit={handleCreateBox} className="space-y-6">
                     <div>
-                      <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Nombre o Ubicación de la Caja *</label>
-                      <input name="name" required placeholder="Ej. Caja Principal -80°C Rack 4" className="w-full p-4 border border-slate-300 rounded-2xl font-bold text-lg outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all bg-slate-50 hover:bg-white" />
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Nombre o Ubicación *</label>
+                      <input name="name" required placeholder="Ej. Caja Principal -80°C Rack 4" className="w-full p-4 border border-slate-300 rounded-xl font-bold text-lg outline-none focus:border-indigo-500 focus:ring-2 bg-slate-50 focus:bg-white transition-all" />
                     </div>
                     <div className="grid grid-cols-2 gap-6">
-                      <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                        <label className="block text-xs font-black text-blue-700 uppercase tracking-wider mb-3 text-center">Columnas (1, 2, 3...) *</label>
-                        <input type="number" name="cols" required defaultValue={10} min="1" max="20" className="w-full p-3 border border-blue-200 rounded-xl font-black text-3xl text-center outline-none focus:border-blue-500 text-blue-900 bg-white shadow-sm" />
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 text-center">Columnas (1, 2, 3...) *</label>
+                        <input type="number" name="cols" required defaultValue={10} min="1" max="20" className="w-full p-3 border border-slate-300 rounded-lg font-black text-2xl text-center outline-none focus:border-indigo-500" />
                       </div>
-                      <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
-                        <label className="block text-xs font-black text-indigo-700 uppercase tracking-wider mb-3 text-center">Filas (A, B, C...) *</label>
-                        <input type="number" name="rows" required defaultValue={10} min="1" max="26" className="w-full p-3 border border-indigo-200 rounded-xl font-black text-3xl text-center outline-none focus:border-indigo-500 text-indigo-900 bg-white shadow-sm" />
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 text-center">Filas (A, B, C...) *</label>
+                        <input type="number" name="rows" required defaultValue={10} min="1" max="26" className="w-full p-3 border border-slate-300 rounded-lg font-black text-2xl text-center outline-none focus:border-indigo-500" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2 mt-2">Formato de Viales</label>
-                      <select name="tubeType" className="w-full p-4 border border-slate-300 rounded-2xl font-bold outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all bg-white cursor-pointer text-slate-700">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-2">Formato de Viales</label>
+                      <select name="tubeType" className="w-full p-4 border border-slate-300 rounded-xl font-bold outline-none focus:border-indigo-500 bg-white">
                         <option value="Eppendorf 1.5mL">Eppendorf 1.5mL / 2.0mL</option>
                         <option value="Tubos PCR 0.2mL">Tubos PCR 0.2mL</option>
                         <option value="Crioviales 2mL">Crioviales 2mL</option>
@@ -552,88 +530,80 @@
                         <option value="Tubos Falcon 50mL">Tubos Falcon 50mL</option>
                       </select>
                     </div>
-                    <button type="submit" className="w-full py-5 mt-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/40 text-lg transition-all flex items-center justify-center gap-2">
-                      <LayoutGrid size={22}/> Generar Matriz de Caja
-                    </button>
+                    <button type="submit" className="w-full py-5 mt-4 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-lg text-lg transition-transform hover:-translate-y-1">Generar Matriz de Caja</button>
                   </form>
                 </div>
               </div>
             )}
 
-            {/* VISTA 3: EDITOR DE CAJA (GRID/EXCEL) */}
+            {/* VISTA 3: EDITOR DE CAJA (GRID VISUAL / EXCEL) */}
             {activeTab === 'box_view' && selectedBox && (
-              <div className="flex flex-col h-full animate-fade-in relative p-4 md:p-6 max-w-[1600px] mx-auto w-full">
+              <div className="flex flex-col h-full animate-fade-in relative p-4 max-w-[1800px] mx-auto w-full">
                 
-                {/* Panel de Control Superior */}
-                <div className="glass-panel rounded-3xl p-4 sm:p-5 mb-5 flex flex-col lg:flex-row justify-between items-center gap-4 shadow-sm z-10 flex-shrink-0">
+                {/* Herramientas Superiores */}
+                <div className="bg-white rounded-2xl p-4 mb-4 flex flex-col lg:flex-row justify-between items-center gap-4 shadow-sm border border-slate-200 flex-shrink-0 z-10">
                   <div className="flex items-center gap-4 w-full lg:w-auto">
-                    <div className="hidden sm:flex bg-gradient-to-br from-indigo-500 to-blue-600 p-3 rounded-2xl text-white shadow-md"><LayoutGrid size={24}/></div>
-                    <div className="flex-1">
-                      <h2 className="text-xl sm:text-2xl font-black text-slate-800 line-clamp-1">{selectedBox.name}</h2>
-                      <div className="flex flex-wrap items-center gap-3 mt-1">
-                        <span className="text-xs font-mono bg-slate-200 text-slate-600 px-2 py-0.5 rounded border border-slate-300 cursor-pointer hover:bg-slate-300" title="Imprimir Etiqueta de Caja" onClick={()=>handlePrintLabels(true)}><PrinterIcon size={12} className="inline mr-1"/>{selectedBox.barcode}</span>
+                    <div className="bg-indigo-100 p-3 rounded-xl text-indigo-600 hidden sm:block"><LayoutGrid size={24}/></div>
+                    <div>
+                      <h2 className="text-xl font-black text-slate-800 line-clamp-1">{selectedBox.name}</h2>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{selectedBox.barcode}</span>
                         <span className="text-xs font-bold text-slate-500 flex items-center gap-1"><Beaker size={12}/> {selectedBox.tubeType}</span>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="flex w-full lg:w-auto items-center gap-3 overflow-x-auto pb-2 lg:pb-0">
+                  <div className="flex w-full lg:w-auto items-center gap-3 overflow-x-auto">
                     <div className="flex bg-slate-100 rounded-xl p-1 border border-slate-200">
-                      <button onClick={()=>setViewMode('visual')} className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap ${viewMode==='visual'?'bg-white text-indigo-600 shadow-sm':'text-slate-500 hover:text-slate-700'}`}><LayoutGrid size={16}/> Visual</button>
-                      <button onClick={()=>setViewMode('table')} className={`px-4 py-2 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap ${viewMode==='table'?'bg-white text-indigo-600 shadow-sm':'text-slate-500 hover:text-slate-700'}`}><List size={16}/> Excel / Tabla</button>
+                      <button onClick={()=>setViewMode('visual')} className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${viewMode==='visual'?'bg-white text-indigo-600 shadow-sm':'text-slate-500 hover:text-slate-700'}`}><LayoutGrid size={16}/> Visual Rack</button>
+                      <button onClick={()=>setViewMode('table')} className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 whitespace-nowrap ${viewMode==='table'?'bg-white text-indigo-600 shadow-sm':'text-slate-500 hover:text-slate-700'}`}><List size={16}/> Tabla Excel</button>
                     </div>
-                    {currentUser.isAuthorized && (
-                      <button onClick={saveBoxCells} className="px-5 py-2.5 bg-emerald-500 text-white font-black rounded-xl shadow-md shadow-emerald-500/30 hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 flex-shrink-0">
-                        <Save size={18}/> <span>Guardar Caja</span>
-                      </button>
-                    )}
+                    <button onClick={saveBoxCells} className="px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl shadow-md hover:bg-indigo-700 transition-transform hover:-translate-y-0.5 flex items-center gap-2">
+                      <Save size={18}/> Guardar
+                    </button>
                   </div>
                 </div>
 
-                {/* --- BARRA DE HERRAMIENTAS MODO EXCEL --- */}
-                {viewMode === 'table' && currentUser.isAuthorized && (
+                {/* --- BARRA HERRAMIENTAS EXCEL --- */}
+                {viewMode === 'table' && (
                   <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3 mb-4 flex flex-wrap gap-3 items-center justify-between shadow-sm shrink-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black text-indigo-800 bg-indigo-200 px-3 py-1.5 rounded-lg">{selectedTableCells.length} celdas seleccionadas</span>
-                      <button onClick={selectAllTableCells} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white px-3 py-1.5 rounded-lg border border-indigo-200 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-black text-indigo-800 bg-indigo-200 px-3 py-1.5 rounded-lg">{selectedTableCells.length} celdas marcadas</span>
+                      <button onClick={selectAllTableCells} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-white px-3 py-1.5 rounded-lg border border-indigo-200 shadow-sm transition-colors">
                         {selectedTableCells.length > 0 ? 'Desmarcar Todo' : 'Seleccionar Todo'}
                       </button>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={handleCopyCells} className="px-4 py-2 bg-white text-indigo-700 font-bold text-xs rounded-xl shadow-sm border border-indigo-200 hover:bg-indigo-100 flex items-center gap-1"><ClipboardCopy size={14}/> Copiar Atributos</button>
-                      <button onClick={handlePasteCells} className={`px-4 py-2 font-bold text-xs rounded-xl shadow-sm border flex items-center gap-1 ${clipboardData ? 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}><ClipboardPaste size={14}/> Pegar en Seleccionados</button>
-                      <button onClick={handleClearCells} className="px-4 py-2 bg-white text-red-600 font-bold text-xs rounded-xl shadow-sm border border-red-200 hover:bg-red-50 flex items-center gap-1"><Trash2 size={14}/> Vaciar</button>
-                      <button onClick={()=>handlePrintLabels(false)} className="px-4 py-2 bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm hover:bg-slate-900 flex items-center gap-1 ml-2"><Printer size={14}/> Imprimir QRs</button>
+                      <button onClick={handleCopyCells} className="px-4 py-2 bg-white text-indigo-700 font-bold text-xs rounded-xl shadow-sm border border-indigo-200 hover:bg-indigo-100 flex items-center gap-1 transition-colors"><ClipboardCopy size={14}/> Copiar Atributos</button>
+                      <button onClick={handlePasteCells} className={`px-4 py-2 font-bold text-xs rounded-xl shadow-sm border flex items-center gap-1 transition-colors ${clipboardData ? 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}><ClipboardPaste size={14}/> Pegar a Seleccionadas</button>
+                      <button onClick={handleClearCells} className="px-4 py-2 bg-white text-red-600 font-bold text-xs rounded-xl shadow-sm border border-red-200 hover:bg-red-50 flex items-center gap-1 transition-colors"><Trash2 size={14}/> Vaciar</button>
                     </div>
                   </div>
                 )}
 
-                {/* Área Dual de Trabajo */}
-                <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden relative">
+                {/* ÁREA DE EDICIÓN PRINCIPAL (Segura y Libre de Bugs Visuales) */}
+                <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0 relative">
                   
-                  {/* Zona Izquierda: Grid o Tabla */}
-                  <div className={`bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all duration-300 ${viewMode === 'visual' && selectedCellId ? 'lg:w-2/3' : 'w-full'}`}>
+                  {/* Zona Izquierda (Rack o Tabla) */}
+                  <div className="flex-1 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative z-0">
                     
-                    {/* --- MODO VISUAL GRID --- */}
+                    {/* VISUAL RACK */}
                     {viewMode === 'visual' && (
                       <div className="flex-1 overflow-auto p-4 sm:p-8 flex justify-center items-start bg-slate-50/50">
-                        <div className="box-grid-container">
-                          <div className="box-grid" style={{ gridTemplateColumns: `36px repeat(${selectedBox.cols}, minmax(0, 1fr))` }}>
-                            {/* Esquina vacía */}
+                        <div className="rack-container">
+                          <div className="rack-grid" style={{ gridTemplateColumns: `36px repeat(${selectedBox.cols}, minmax(0, 1fr))` }}>
+                            {/* Esquina */}
                             <div></div>
-                            
-                            {/* Cabeceras de Columna (Números) */}
+                            {/* Cabeceras de Columna */}
                             {Array.from({length: selectedBox.cols}).map((_, i) => (
                               <div key={`col-${i}`} className="col-label">{i + 1}</div>
                             ))}
-                            
                             {/* Filas */}
                             {Array.from({length: selectedBox.rows}).map((_, r) => (
                               <React.Fragment key={`row-${r}`}>
                                 {/* Letra de Fila */}
                                 <div className="row-label">{getRowLabel(r)}</div>
-                                
-                                {/* Celdas Interactuables */}
+                                {/* Celdas (Hoyos) */}
                                 {Array.from({length: selectedBox.cols}).map((_, c) => {
                                   const cellId = `${getRowLabel(r)}${c + 1}`;
                                   const cellData = boxCells[cellId];
@@ -645,12 +615,11 @@
                                     <div 
                                       key={cellId} 
                                       onClick={() => setSelectedCellId(cellId)}
-                                      className={`box-cell ${hasContent ? 'filled' : ''} ${isSelected ? 'selected' : ''}`}
-                                      style={{ backgroundColor: hasContent ? cellColor : '#ffffff' }}
-                                      title={hasContent ? `${cellId}: ${cellData.name}` : `Posición Libre ${cellId}`}
+                                      className={`rack-cell ${hasContent ? 'filled' : ''} ${isSelected ? 'selected' : ''}`}
+                                      style={hasContent ? { '--tube-color': cellColor } : {}}
+                                      title={hasContent ? `${cellId}: ${cellData.name}` : `Vacío ${cellId}`}
                                     >
                                       {!hasContent && <span className="opacity-40">{cellId}</span>}
-                                      {hasContent && <span className="drop-shadow-md">{cellId}</span>}
                                     </div>
                                   )
                                 })}
@@ -661,20 +630,18 @@
                       </div>
                     )}
 
-                    {/* --- MODO TABLA (EXCEL) --- */}
+                    {/* MODO TABLA EXCEL */}
                     {viewMode === 'table' && (
-                      <div className="flex-1 overflow-auto">
+                      <div className="flex-1 overflow-auto relative">
                         <table className="w-full text-left whitespace-nowrap text-sm">
-                          <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 z-10 shadow-sm">
+                          <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm border-b border-slate-200">
                             <tr>
-                              <th className="p-3 text-center w-10">
-                                <input type="checkbox" onChange={selectAllTableCells} checked={selectedTableCells.length === selectedBox.rows * selectedBox.cols && selectedBox.rows > 0} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"/>
-                              </th>
-                              <th className="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Posición</th>
-                              <th className="p-3 text-xs font-black text-slate-500 uppercase tracking-wider">Código Único</th>
-                              <th className="p-3 text-xs font-black text-slate-500 uppercase tracking-wider w-1/3">Contenido / Muestra</th>
-                              <th className="p-3 text-xs font-black text-slate-500 uppercase tracking-wider">Fecha</th>
-                              <th className="p-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Color</th>
+                              <th className="p-3 text-center w-10"><input type="checkbox" onChange={selectAllTableCells} checked={selectedTableCells.length === selectedBox.rows * selectedBox.cols && selectedBox.rows > 0} className="w-4 h-4 cursor-pointer"/></th>
+                              <th className="p-3 text-xs font-black text-slate-500 uppercase text-center">Pos</th>
+                              <th className="p-3 text-xs font-black text-slate-500 uppercase">Código Único</th>
+                              <th className="p-3 text-xs font-black text-slate-500 uppercase w-1/3">Nombre Muestra</th>
+                              <th className="p-3 text-xs font-black text-slate-500 uppercase">Fecha</th>
+                              <th className="p-3 text-xs font-black text-slate-500 uppercase text-center">Color</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -686,27 +653,21 @@
                                 const isSelected = selectedTableCells.includes(cellId);
                                 
                                 return (
-                                  <tr key={cellId} onClick={(e) => { if(e.target.tagName !== 'INPUT') toggleTableCellSelection(cellId); }} className={`transition-colors cursor-pointer hover:bg-indigo-50/50 ${isSelected ? 'bg-indigo-50' : hasData ? 'bg-white' : 'bg-slate-50/30'}`}>
+                                  <tr key={cellId} onClick={(e) => { if(e.target.tagName !== 'INPUT') toggleTableCellSelection(cellId); }} className={`transition-colors cursor-pointer hover:bg-indigo-50/50 ${isSelected ? 'bg-indigo-50' : hasData ? 'bg-white' : 'bg-slate-50/50'}`}>
                                     <td className="p-3 text-center border-r border-slate-100">
-                                      <input type="checkbox" checked={isSelected} onChange={() => toggleTableCellSelection(cellId)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" onClick={(e)=>e.stopPropagation()}/>
+                                      <input type="checkbox" checked={isSelected} onChange={() => toggleTableCellSelection(cellId)} className="w-4 h-4 text-indigo-600 cursor-pointer" onClick={(e)=>e.stopPropagation()}/>
                                     </td>
                                     <td className="p-3">
-                                      <div className={`mx-auto w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${hasData ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
+                                      <div className={`mx-auto w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs border ${hasData ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
                                         {cellId}
                                       </div>
                                     </td>
-                                    <td className="p-3">
-                                      <input value={data.code || ''} onChange={(e)=>handleCellChange(cellId, 'code', e.target.value)} disabled={!currentUser.isAuthorized} placeholder="Auto o Manual..." className="w-full p-2 border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white bg-transparent rounded-lg outline-none font-mono text-xs transition-all" onClick={(e)=>e.stopPropagation()} />
-                                    </td>
-                                    <td className="p-3">
-                                      <input value={data.name || ''} onChange={(e)=>handleCellChange(cellId, 'name', e.target.value)} disabled={!currentUser.isAuthorized} placeholder="Nombre de la muestra..." className={`w-full p-2 border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white bg-transparent rounded-lg outline-none transition-all ${hasData ? 'font-bold text-slate-800' : 'font-medium text-slate-400'}`} onClick={(e)=>e.stopPropagation()} />
-                                    </td>
-                                    <td className="p-3">
-                                      <input type="date" value={data.date || ''} onChange={(e)=>handleCellChange(cellId, 'date', e.target.value)} disabled={!currentUser.isAuthorized} className="w-full p-2 border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white bg-transparent rounded-lg outline-none text-slate-600 text-xs font-medium transition-all" onClick={(e)=>e.stopPropagation()} />
-                                    </td>
+                                    <td className="p-3"><input value={data.code || ''} onChange={(e)=>handleCellChange(cellId, 'code', e.target.value)} placeholder="Automático..." className="w-full p-2 border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white bg-transparent rounded-lg outline-none font-mono text-xs transition-colors" onClick={(e)=>e.stopPropagation()} /></td>
+                                    <td className="p-3"><input value={data.name || ''} onChange={(e)=>handleCellChange(cellId, 'name', e.target.value)} placeholder="Vacío..." className={`w-full p-2 border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white bg-transparent rounded-lg outline-none transition-colors ${hasData ? 'font-bold text-slate-800' : 'font-medium text-slate-400'}`} onClick={(e)=>e.stopPropagation()} /></td>
+                                    <td className="p-3"><input type="date" value={data.date || ''} onChange={(e)=>handleCellChange(cellId, 'date', e.target.value)} className="w-full p-2 border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white bg-transparent rounded-lg outline-none text-slate-600 text-xs font-medium transition-colors" onClick={(e)=>e.stopPropagation()} /></td>
                                     <td className="p-3 text-center">
-                                      <div className="relative inline-block w-8 h-8 rounded-full overflow-hidden border border-slate-300 shadow-sm hover:scale-110 transition-transform cursor-pointer" onClick={(e)=>e.stopPropagation()}>
-                                        <input type="color" value={data.color || '#3b82f6'} onChange={(e)=>handleCellChange(cellId, 'color', e.target.value)} disabled={!currentUser.isAuthorized} className="absolute inset-[-10px] w-12 h-12 cursor-pointer p-0 border-none" />
+                                      <div className="relative inline-block w-6 h-6 rounded-full overflow-hidden border shadow-sm cursor-pointer" onClick={(e)=>e.stopPropagation()}>
+                                        <input type="color" value={data.color || '#3b82f6'} onChange={(e)=>handleCellChange(cellId, 'color', e.target.value)} className="absolute inset-[-10px] w-12 h-12 cursor-pointer border-none p-0" />
                                       </div>
                                     </td>
                                   </tr>
@@ -719,58 +680,51 @@
                     )}
                   </div>
 
-                  {/* PANEL LATERAL DE EDICIÓN DEL TUBO (Solo en Modo Visual) */}
+                  {/* ZONA DERECHA: PANEL DEL TUBO (Seguro sin bugs visuales) */}
                   {viewMode === 'visual' && selectedCellId && (
-                    <div className="w-80 bg-white rounded-3xl shadow-sm border border-slate-200 overflow-y-auto flex flex-col animate-fade-in shrink-0">
-                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
+                    <div className="w-full lg:w-80 flex-shrink-0 bg-white shadow-xl rounded-3xl border border-slate-200 flex flex-col z-20 animate-fade-in overflow-hidden h-full">
+                      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                         <h3 className="font-black text-slate-900 flex items-center gap-2"><MapPin size={18} className="text-indigo-500"/> Posición {selectedCellId}</h3>
-                        <button onClick={()=>setSelectedCellId(null)} className="p-1.5 bg-white hover:bg-slate-200 text-slate-500 rounded-full transition-colors shadow-sm border border-slate-200"><X size={16}/></button>
+                        <button onClick={()=>setSelectedCellId(null)} className="p-1.5 bg-white hover:bg-slate-200 text-slate-500 rounded-full transition-colors border border-slate-200"><X size={16}/></button>
                       </div>
                       
-                      <div className="p-6 flex-1 flex flex-col space-y-5">
+                      <div className="p-5 flex-1 overflow-y-auto space-y-5">
                         <div className="relative pt-4 pb-2 bg-gradient-to-b from-transparent to-slate-50 rounded-2xl border border-slate-100">
-                          <TubeVisual 
-                            color={boxCells[selectedCellId]?.name ? (boxCells[selectedCellId]?.color || '#3b82f6') : null} 
-                            isEmpty={!boxCells[selectedCellId]?.name}
-                            type={selectedBox.tubeType}
-                          />
-                          {/* Color Picker Flotante */}
-                          {currentUser.isAuthorized && (
-                            <div className="absolute bottom-2 right-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-md flex items-center gap-1.5 hover:scale-105 transition-transform group cursor-pointer overflow-hidden">
-                              <Droplet size={16} className="text-slate-400 group-hover:text-indigo-500 transition-colors z-10 pointer-events-none"/>
-                              <input type="color" value={boxCells[selectedCellId]?.color || '#3b82f6'} onChange={(e)=>handleCellChange(selectedCellId, 'color', e.target.value)} className="absolute inset-[-10px] w-12 h-12 cursor-pointer border-none opacity-0" title="Cambiar color del líquido"/>
-                              <div className="w-4 h-4 rounded-full border border-slate-200 shadow-inner z-0" style={{backgroundColor: boxCells[selectedCellId]?.color || '#3b82f6'}}></div>
-                            </div>
-                          )}
+                          <TubeVisual color={boxCells[selectedCellId]?.name ? (boxCells[selectedCellId]?.color || '#3b82f6') : null} isEmpty={!boxCells[selectedCellId]?.name} type={selectedBox.tubeType} />
+                          <div className="absolute bottom-2 right-2 bg-white p-1.5 rounded-xl border border-slate-200 shadow-md flex items-center gap-1.5 hover:scale-105 transition-transform overflow-hidden cursor-pointer">
+                            <Droplet size={14} className="text-slate-400 pointer-events-none"/>
+                            <input type="color" value={boxCells[selectedCellId]?.color || '#3b82f6'} onChange={(e)=>handleCellChange(selectedCellId, 'color', e.target.value)} className="absolute inset-[-10px] w-12 h-12 cursor-pointer border-none opacity-0" title="Color visual"/>
+                            <div className="w-4 h-4 rounded-full border border-slate-200 shadow-inner" style={{backgroundColor: boxCells[selectedCellId]?.color || '#3b82f6'}}></div>
+                          </div>
                         </div>
 
                         <div className="space-y-4">
                           <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex justify-between">Código Único <button onClick={() => handleCellChange(selectedCellId, 'code', generateSampleCode())} className="text-indigo-500 hover:text-indigo-700 lowercase flex items-center gap-1"><Settings size={12}/> Auto</button></label>
-                            <input value={boxCells[selectedCellId]?.code || ''} onChange={(e)=>handleCellChange(selectedCellId, 'code', e.target.value)} disabled={!currentUser.isAuthorized} placeholder="Ej. L-0982" className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-mono text-sm outline-none focus:border-indigo-500 transition-all text-slate-700" />
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex justify-between">Código Único (Barcode) <span onClick={() => handleCellChange(selectedCellId, 'code', generateSampleCode())} className="text-indigo-500 cursor-pointer hover:underline">Auto-Generar</span></label>
+                            <input value={boxCells[selectedCellId]?.code || ''} onChange={(e)=>handleCellChange(selectedCellId, 'code', e.target.value)} placeholder="Ej. LAB-1234" className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-mono text-sm outline-none focus:border-indigo-500 text-slate-700" />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Contenido de la Muestra *</label>
-                            <input value={boxCells[selectedCellId]?.name || ''} onChange={(e)=>handleCellChange(selectedCellId, 'name', e.target.value)} disabled={!currentUser.isAuthorized} placeholder="Ej. Suero Paciente 12" className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:border-indigo-500 focus:bg-indigo-50/30 transition-all" />
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Nombre Muestra *</label>
+                            <input value={boxCells[selectedCellId]?.name || ''} onChange={(e)=>handleCellChange(selectedCellId, 'name', e.target.value)} placeholder="Ej. Suero Control" className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:border-indigo-500" />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Fecha</label>
-                            <input type="date" value={boxCells[selectedCellId]?.date || ''} onChange={(e)=>handleCellChange(selectedCellId, 'date', e.target.value)} disabled={!currentUser.isAuthorized} className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 transition-all text-slate-600 font-medium" />
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Fecha</label>
+                            <input type="date" value={boxCells[selectedCellId]?.date || ''} onChange={(e)=>handleCellChange(selectedCellId, 'date', e.target.value)} className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 text-slate-600 font-medium" />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Descripción / Notas Adicionales</label>
-                            <textarea value={boxCells[selectedCellId]?.desc || ''} onChange={(e)=>handleCellChange(selectedCellId, 'desc', e.target.value)} disabled={!currentUser.isAuthorized} rows="3" placeholder="Volumen, pureza, buffer, observaciones..." className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 transition-all text-slate-600 resize-none"></textarea>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Observaciones</label>
+                            <textarea value={boxCells[selectedCellId]?.desc || ''} onChange={(e)=>handleCellChange(selectedCellId, 'desc', e.target.value)} rows="3" placeholder="Detalles de la muestra..." className="w-full p-2.5 border-2 border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 text-slate-600 resize-none"></textarea>
                           </div>
                         </div>
                       </div>
                       
-                      {currentUser.isAuthorized && boxCells[selectedCellId]?.name && (
-                        <div className="p-5 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
+                      {boxCells[selectedCellId]?.name && (
+                        <div className="p-4 border-t border-slate-100 bg-slate-50">
                           <button onClick={() => {
-                            if(window.confirm(`¿Vaciar la posición ${selectedCellId}? Se perderán los datos de la muestra.`)){
+                            if(window.confirm(`¿Vaciar la celda ${selectedCellId}?`)){
                               const newCells = {...boxCells}; delete newCells[selectedCellId]; setBoxCells(newCells);
                             }
-                          }} className="w-full py-3.5 bg-white border-2 border-red-100 text-red-600 font-bold rounded-xl hover:bg-red-50 hover:border-red-200 transition-all flex justify-center items-center gap-2 shadow-sm"><Trash2 size={16}/> Vaciar Posición {selectedCellId}</button>
+                          }} className="w-full py-3 bg-white border-2 border-red-100 text-red-600 font-bold rounded-xl hover:bg-red-50 flex justify-center items-center gap-2 transition-colors"><Trash2 size={16}/> Vaciar Tubo</button>
                         </div>
                       )}
                     </div>
@@ -779,37 +733,30 @@
               </div>
             )}
 
-            {/* VISTA 4: ACCESOS MASTER */}
+            {/* VISTA 4: ACCESOS (Solo Master) */}
             {activeTab === 'admin' && currentUser.isMaster && (
               <div className="p-4 md:p-8 flex-1 overflow-y-auto">
-                <div className="bg-white p-8 md:p-10 rounded-[2rem] shadow-2xl border border-emerald-100 max-w-3xl mx-auto animate-fade-in w-full">
+                <div className="bg-white p-8 md:p-10 rounded-[2rem] shadow-xl border border-purple-100 max-w-3xl mx-auto animate-fade-in w-full">
                   <div className="flex items-center gap-5 mb-8 pb-6 border-b border-slate-100">
-                    <div className="bg-emerald-100 text-emerald-600 p-4 rounded-2xl shadow-inner"><Key size={32}/></div>
+                    <div className="bg-purple-100 text-purple-600 p-4 rounded-2xl shadow-inner"><Key size={32}/></div>
                     <div>
-                      <h2 className="text-2xl sm:text-3xl font-black text-slate-800">Control de Accesos</h2>
-                      <p className="text-sm text-slate-500 font-medium mt-1">Autoriza correos del equipo para crear y editar cajas del Biobanco.</p>
+                      <h2 className="text-2xl sm:text-3xl font-black text-slate-800">Accesos Seguros</h2>
+                      <p className="text-sm text-slate-500 font-medium mt-1">Autoriza correos para que puedan tener su Workspace de Biobanco.</p>
                     </div>
                   </div>
 
                   <form onSubmit={handleAddAuthorizedUser} className="flex flex-col sm:flex-row gap-4 mb-10">
-                    <input type="email" value={newAuthEmail} onChange={e=>setNewAuthEmail(e.target.value)} required placeholder="ejemplo@laboratorio.com" className="flex-1 p-4 border-2 border-slate-200 rounded-2xl outline-none focus:border-emerald-500 focus:bg-emerald-50/30 transition-all font-medium" />
-                    <button type="submit" className="px-8 py-4 bg-emerald-500 text-white font-black rounded-2xl hover:bg-emerald-600 shadow-lg shadow-emerald-500/30 whitespace-nowrap transition-all flex items-center justify-center gap-2"><CheckCircle2 size={20}/> Dar Acceso</button>
+                    <input type="email" value={newAuthEmail} onChange={e=>setNewAuthEmail(e.target.value)} required placeholder="ejemplo@laboratorio.com" className="flex-1 p-4 border-2 border-slate-200 rounded-2xl outline-none focus:border-purple-500 font-medium" />
+                    <button type="submit" className="px-8 py-4 bg-purple-600 text-white font-black rounded-2xl hover:bg-purple-700 shadow-md whitespace-nowrap transition-colors flex items-center justify-center gap-2"><CheckCircle2 size={20}/> Conceder Licencia</button>
                   </form>
 
-                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs mb-4">Usuarios con Privilegios ({authorizedUsers.length + MASTER_EMAILS.length})</h3>
+                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs mb-4">Investigadores con Licencia ({authorizedUsers.length})</h3>
                   <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr><th className="p-4 font-black text-slate-500 uppercase tracking-wider">Email del Investigador</th><th className="p-4 font-black text-slate-500 uppercase tracking-wider">Otorgado</th><th className="p-4 text-center font-black text-slate-500 uppercase tracking-wider">Retirar</th></tr>
+                        <tr><th className="p-4 font-black text-slate-500 uppercase tracking-wider">Email Google</th><th className="p-4 font-black text-slate-500 uppercase tracking-wider">Otorgado</th><th className="p-4 text-center font-black text-slate-500 uppercase tracking-wider">Revocar</th></tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {MASTER_EMAILS.map(email => (
-                          <tr key={email} className="bg-emerald-50/30">
-                            <td className="p-4 font-bold text-emerald-700 flex items-center gap-2"><ShieldAlert size={16}/> {email}</td>
-                            <td className="p-4 text-slate-400 font-medium font-mono text-xs">Administrador Maestro</td>
-                            <td className="p-4 text-center text-slate-300">-</td>
-                          </tr>
-                        ))}
                         {authorizedUsers.map(u => (
                           <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 font-bold text-slate-700">{u.email}</td>
@@ -817,6 +764,7 @@
                             <td className="p-4 text-center"><button onClick={()=>handleRemoveAuthUser(u.id)} className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-lg transition-colors"><Trash2 size={16} className="mx-auto"/></button></td>
                           </tr>
                         ))}
+                        {authorizedUsers.length === 0 && <tr><td colSpan="3" className="p-6 text-center text-slate-400 font-medium">No hay usuarios invitados. Eres el único en el sistema.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -824,27 +772,27 @@
               </div>
             )}
 
-            {/* VISTA 5: ESCÁNER */}
+            {/* VISTA 5: ESCÁNER / BÚSQUEDA */}
             {activeTab === 'scanner' && (
               <div className="max-w-2xl w-full mx-auto space-y-6 animate-fade-in flex flex-col justify-center h-full pb-20 p-4">
                 <div className="text-center mb-6">
                   <div className="inline-block p-4 bg-indigo-100 text-indigo-600 rounded-full mb-4 shadow-inner">
                     <ScanLine size={48}/>
                   </div>
-                  <h2 className="text-3xl font-black text-slate-800">Rastreador de Muestras</h2>
-                  <p className="text-slate-500 mt-2 font-medium max-w-md mx-auto">Escanea el código de barras de una caja o el código único de un tubo para ubicarlo al instante en el biobanco.</p>
+                  <h2 className="text-3xl font-black text-slate-800">Motor de Búsqueda de Muestras</h2>
+                  <p className="text-slate-500 mt-2 font-medium max-w-md mx-auto">Conecta tu escáner USB/Bluetooth y dispara, o escribe el código único del tubo/caja.</p>
                 </div>
 
                 <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 p-8 md:p-10">
-                  <form onSubmit={handleSearchSubmit} className="space-y-6">
+                  <form onSubmit={handleSearchSubmit} className="space-y-6 bg-slate-50 p-4 rounded-3xl border-2 border-indigo-100">
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
-                        <Search className="text-indigo-400 group-focus-within:text-indigo-600 transition-colors" size={28} />
+                        <Search className="text-indigo-400" size={28} />
                       </div>
-                      <input type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="Ej. CAJA-XX o L-1234..." className="w-full pl-16 pr-6 py-6 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none font-mono text-xl shadow-inner text-center font-bold text-slate-800 transition-all placeholder-slate-300" autoFocus />
+                      <input type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="Pistola láser aquí..." className="w-full pl-16 pr-6 py-6 bg-white border-2 border-transparent rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 outline-none font-mono text-xl shadow-sm text-center font-bold text-slate-800 transition-all placeholder-slate-300" autoFocus />
                     </div>
-                    <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/40 hover:-translate-y-1 transition-all text-lg flex justify-center items-center gap-3">
-                      Localizar en Biobanco
+                    <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest hover:bg-indigo-700 shadow-md transition-all text-lg flex justify-center items-center gap-3">
+                      Localizar Muestra Exacta
                     </button>
                   </form>
                 </div>
