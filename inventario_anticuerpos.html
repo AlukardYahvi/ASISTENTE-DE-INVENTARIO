@@ -29,7 +29,7 @@
 
     const { 
       Search, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, 
-      Beaker, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User
+      Beaker, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Info, Calendar, Tag, Layers
     } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -56,17 +56,21 @@
     function AnticuerposApp() {
       const [currentUser, setCurrentUser] = useState(null);
       const [anticuerpos, setAnticuerpos] = useState([]);
-      const [abLogs, setAbLogs] = useState([]); // Historial de logs
+      const [abLogs, setAbLogs] = useState([]); 
       const [searchQuery, setSearchQuery] = useState('');
       const [loading, setLoading] = useState(true);
+
+      // Estados de Vistas
+      const [view, setView] = useState('catalog'); // 'catalog' o 'detail'
+      const [selectedItemDetail, setSelectedItemDetail] = useState(null); // Item a mostrar en detalle
 
       // Estados de Modales
       const [showForm, setShowForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
       const [imagePreview, setImagePreview] = useState(null);
       
-      const [consumeItem, setConsumeItem] = useState(null); // Modal para descontar/usar
-      const [showHistory, setShowHistory] = useState(null); // Modal para ver historial
+      const [consumeItem, setConsumeItem] = useState(null); 
+      const [showHistory, setShowHistory] = useState(null); 
 
       useEffect(() => {
         const initAuth = async () => {
@@ -96,13 +100,24 @@
         const invRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos');
         const unsubInv = onSnapshot(invRef, 
           (snapshot) => {
-            setAnticuerpos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAnticuerpos(data);
+            
+            // Actualizar el item seleccionado si estamos en la vista de detalle
+            if (selectedItemDetail) {
+              const updatedItem = data.find(i => i.id === selectedItemDetail.id);
+              if (updatedItem) {
+                setSelectedItemDetail(updatedItem);
+              } else {
+                setView('catalog'); // Si se eliminó, volver al catálogo
+              }
+            }
             setLoading(false);
           },
           (error) => { console.error("Error al escuchar cambios: ", error); setLoading(false); }
         );
 
-        // Listener para Historial/Logs (Sin queries complejas)
+        // Listener para Historial/Logs
         const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos_logs');
         const unsubLogs = onSnapshot(logsRef, 
           (snapshot) => {
@@ -112,7 +127,7 @@
         );
 
         return () => { unsubInv(); unsubLogs(); };
-      }, [currentUser]);
+      }, [currentUser, selectedItemDetail]); // Dependencia agregada para actualizar el detalle
 
       const handleImageUpload = (e) => {
         const file = e.target.files[0];
@@ -160,7 +175,6 @@
         data.qty = Number(data.qty);
         data.imageUrl = imagePreview || editingItem?.imageUrl || '';
 
-        // Name ahora será un derivado visual si lo deseamos, pero guardamos target explícito
         if (!data.barcode) {
             data.barcode = `LAB-AB-${Date.now().toString(36).toUpperCase()}`;
         }
@@ -171,7 +185,6 @@
         try {
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos', docId), data, { merge: true });
           
-          // Registrar en el historial
           await logAction(
             docId, 
             data.target || data.name, 
@@ -195,10 +208,8 @@
         const newQty = consumeItem.qty - amountToTake;
 
         try {
-          // Actualizar cantidad
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos', consumeItem.id), { qty: newQty }, { merge: true });
           
-          // Registrar consumo en historial
           await logAction(
             consumeItem.id,
             consumeItem.target || consumeItem.name,
@@ -216,7 +227,7 @@
         if (!currentUser?.isSuperAdmin) return;
         if (window.confirm("¿Seguro que deseas eliminar este anticuerpo permanentemente?")) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos', id));
-          // Podríamos loguear esto globalmente si fuera necesario, pero el item ya no existe.
+          if(view === 'detail') setView('catalog'); // Salir de la vista detalle si se borra
         }
       };
 
@@ -267,6 +278,11 @@
         return d.toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
       };
 
+      const openDetailView = (item) => {
+        setSelectedItemDetail(item);
+        setView('detail');
+      };
+
       if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
       if (!currentUser) {
@@ -285,7 +301,7 @@
       return (
         <div className="min-h-screen pb-12 bg-slate-50 relative">
           
-          {/* Header con Diseño Llamativo */}
+          {/* Header */}
           <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-900 pb-24 pt-8 px-4 md:px-8 shadow-lg">
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex items-center gap-4 text-white">
@@ -297,7 +313,7 @@
               </div>
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <a href="index.html" className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors font-bold flex items-center gap-2 backdrop-blur-sm"><ArrowLeft size={18}/> Dashboard</a>
-                {currentUser.isSuperAdmin && (
+                {currentUser.isSuperAdmin && view === 'catalog' && (
                   <button onClick={() => {setEditingItem(null); setImagePreview(null); setShowForm(true);}} className="flex-1 md:flex-none px-6 py-2 bg-white text-indigo-700 rounded-xl font-bold hover:bg-indigo-50 shadow-xl transition-all">
                     + Registrar Nuevo
                   </button>
@@ -308,24 +324,224 @@
 
           <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-16">
             
-            {/* Buscador y Herramientas */}
-            <div className="bg-white rounded-2xl shadow-md p-4 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border border-gray-100">
-              <div className="flex items-center gap-2 bg-slate-100 p-3 rounded-xl flex-1 w-full focus-within:ring-2 ring-indigo-500 transition-all">
-                <Search className="text-indigo-400 mx-2" size={20} />
-                <input 
-                  type="text" 
-                  placeholder="Buscar por Anti (Especificidad), Hospedero, Caja, Marca..." 
-                  className="w-full bg-transparent outline-none font-medium text-gray-700" 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                />
+            {/* VISTA 1: CATÁLOGO */}
+            {view === 'catalog' && (
+              <div className="animate-fade-in">
+                <div className="bg-white rounded-2xl shadow-md p-4 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border border-gray-100">
+                  <div className="flex items-center gap-2 bg-slate-100 p-3 rounded-xl flex-1 w-full focus-within:ring-2 ring-indigo-500 transition-all">
+                    <Search className="text-indigo-400 mx-2" size={20} />
+                    <input type="text" placeholder="Buscar por Anti (Especificidad), Hospedero, Caja, Marca..." className="w-full bg-transparent outline-none font-medium text-gray-700" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                  </div>
+                  {currentUser.isSuperAdmin && (
+                    <button onClick={handlePrintAllLabels} className="px-5 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center gap-2 shadow-sm w-full md:w-auto justify-center transition-colors">
+                      <Printer size={18}/> Imprimir Catálogo
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {anticuerpos.filter(i => 
+                      (i.target || i.name).toLowerCase().includes(searchQuery.toLowerCase()) || 
+                      i.catalogNum?.includes(searchQuery) || 
+                      i.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      i.host?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      i.locationBox?.toLowerCase().includes(searchQuery.toLowerCase())
+                    ).map(item => (
+                    <div key={item.id} onClick={() => openDetailView(item)} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-300 transition-all duration-300 flex flex-col overflow-hidden group cursor-pointer relative">
+                      
+                      <div className="absolute top-3 right-3 flex flex-col gap-1 items-end z-10 pointer-events-none">
+                        <span className="bg-indigo-600/90 backdrop-blur text-white text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border border-indigo-500/50">Anti: {item.target || item.name}</span>
+                        <span className="bg-white/90 backdrop-blur text-indigo-700 text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border border-slate-200">Host: {item.host || 'N/A'}</span>
+                      </div>
+
+                      <div className="h-40 bg-slate-50 relative flex items-center justify-center p-4 border-b border-slate-100">
+                        {item.imageUrl ? <img src={item.imageUrl} className="h-full object-contain mix-blend-multiply drop-shadow-md group-hover:scale-110 transition-transform duration-500" /> : <ImageIcon className="text-slate-300" size={56}/>}
+                      </div>
+                      
+                      <div className="p-5 flex flex-col flex-1">
+                        <h3 className="font-black text-gray-900 text-lg leading-tight mb-3 pr-2" title={item.target || item.name}>
+                          <span className="text-indigo-400 font-medium text-sm block -mb-1">Anti-</span>
+                          {item.target || item.name}
+                        </h3>
+                        
+                        <div className="space-y-2 text-xs text-gray-600 mb-4 flex-1">
+                          <p className="flex justify-between border-b border-slate-50 pb-1"><span className="font-bold text-slate-400">Marca</span> <span className="font-medium text-slate-700">{item.brand}</span></p>
+                          <p className="flex justify-between border-b border-slate-50 pb-1"><span className="font-bold text-slate-400">Catálogo</span> <span className="font-mono bg-slate-100 px-1 rounded text-slate-700">{item.catalogNum || '--'}</span></p>
+                          
+                          <div className="mt-3 bg-indigo-50/50 p-2 rounded-lg border border-indigo-50">
+                            <p className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1 mb-1"><MapPin size={12}/> Ubicación</p>
+                            <p className="font-medium text-indigo-900 truncate" title={item.locationLab}>{item.locationLab || 'No especificado'}</p>
+                            <p className="font-bold text-indigo-700">{item.locationBox || '--'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-end justify-between pt-4 border-t border-slate-100 mt-2">
+                          <div>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">Disponible</p>
+                            <p className="text-2xl font-black text-emerald-600">{item.qty} <span className="text-xs font-bold text-slate-500">{item.unit}</span></p>
+                          </div>
+                          
+                          {currentUser && (
+                            <div className="flex gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                              <button onClick={(e) => { e.stopPropagation(); setConsumeItem(item); }} className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors shadow-sm" title="Registrar Uso">
+                                <MinusCircle size={18}/>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {anticuerpos.length === 0 && !loading && (
+                   <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300 shadow-sm mt-8">
+                      <Beaker className="mx-auto text-slate-300 mb-4" size={64}/>
+                      <h3 className="text-xl font-bold text-slate-500">No hay anticuerpos registrados</h3>
+                      <p className="text-slate-400 mt-2">Los elementos que agregues aparecerán aquí.</p>
+                   </div>
+                )}
               </div>
-              {currentUser.isSuperAdmin && (
-                <button onClick={handlePrintAllLabels} className="px-5 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center gap-2 shadow-sm w-full md:w-auto justify-center transition-colors">
-                  <Printer size={18}/> Imprimir Catálogo
+            )}
+
+            {/* VISTA 2: DETALLE DEL ARTÍCULO */}
+            {view === 'detail' && selectedItemDetail && (
+              <div className="animate-fade-in pb-10">
+                <button onClick={() => setView('catalog')} className="mb-6 px-4 py-2 bg-white text-indigo-600 font-bold rounded-xl shadow-sm border border-indigo-100 hover:bg-indigo-50 flex items-center gap-2 transition-colors">
+                  <ArrowLeft size={18}/> Volver al Catálogo
                 </button>
-              )}
-            </div>
+
+                <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col lg:flex-row">
+                  {/* Lado Izquierdo: Imagen e Info Básica */}
+                  <div className="lg:w-1/3 bg-slate-50 border-r border-slate-100 p-8 flex flex-col items-center">
+                    <div className="bg-white w-full aspect-square rounded-2xl shadow-inner border-2 border-dashed border-slate-200 flex items-center justify-center p-4 mb-6 relative group">
+                      {selectedItemDetail.imageUrl ? (
+                        <img src={selectedItemDetail.imageUrl} alt={selectedItemDetail.name} className="max-w-full max-h-full object-contain drop-shadow-lg" />
+                      ) : (
+                        <ImageIcon size={64} className="text-slate-300"/>
+                      )}
+                    </div>
+                    
+                    <div className="w-full text-center mb-6">
+                      <p className="text-indigo-500 font-bold uppercase tracking-widest text-xs mb-1">Target / Especificidad</p>
+                      <h2 className="text-3xl font-black text-slate-800">Anti-{selectedItemDetail.target || selectedItemDetail.name}</h2>
+                    </div>
+
+                    <div className="w-full bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                      <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Tag size={14}/> Hospedero</span>
+                        <span className="font-bold text-slate-700">{selectedItemDetail.host || '--'}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Layers size={14}/> ID Base de Datos</span>
+                        <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">{selectedItemDetail.barcode}</span>
+                      </div>
+                      <div className="flex justify-between items-center pb-2">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Calendar size={14}/> Caducidad</span>
+                        <span className={`font-bold ${selectedItemDetail.expirationDate && new Date(selectedItemDetail.expirationDate) < new Date() ? 'text-red-500' : 'text-slate-700'}`}>
+                          {selectedItemDetail.expirationDate || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lado Derecho: Detalles Completos y Acciones */}
+                  <div className="lg:w-2/3 p-8 flex flex-col">
+                    
+                    <div className="flex flex-wrap justify-between items-start gap-4 mb-8">
+                      <div>
+                        <h3 className="text-2xl font-black text-slate-800 mb-1">{selectedItemDetail.brand}</h3>
+                        <p className="text-slate-500 font-medium">Catálogo: <span className="text-slate-700 font-mono">{selectedItemDetail.catalogNum || '--'}</span> | Lote: <span className="text-slate-700 font-mono">{selectedItemDetail.lotNum || '--'}</span></p>
+                      </div>
+                      
+                      {currentUser && (
+                        <div className="flex gap-2">
+                          <button onClick={() => setConsumeItem(selectedItemDetail)} className="px-4 py-2 bg-emerald-100 text-emerald-700 font-bold rounded-xl hover:bg-emerald-200 transition-colors shadow-sm flex items-center gap-2">
+                            <MinusCircle size={18}/> Descontar
+                          </button>
+                          {currentUser.isSuperAdmin && (
+                            <>
+                              <button onClick={() => {setEditingItem(selectedItemDetail); setImagePreview(selectedItemDetail.imageUrl); setShowForm(true);}} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2">
+                                <Settings size={18}/> Editar
+                              </button>
+                              <button onClick={() => handleDelete(selectedItemDetail.id, selectedItemDetail.target || selectedItemDetail.name)} className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 hover:text-red-600 transition-colors shadow-sm">
+                                <Trash2 size={20}/>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                      {/* Ubicación */}
+                      <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
+                        <p className="text-xs uppercase font-bold tracking-widest text-indigo-400 mb-2 flex items-center gap-2"><MapPin size={16}/> Localización Exacta</p>
+                        <p className="font-medium text-indigo-900 text-lg mb-1">{selectedItemDetail.locationLab || 'Laboratorio'}</p>
+                        <p className="font-black text-indigo-700 text-xl">{selectedItemDetail.locationBox || 'Caja no especificada'}</p>
+                      </div>
+
+                      {/* Stock */}
+                      <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center">
+                        <p className="text-xs uppercase font-bold tracking-widest text-emerald-500 mb-2 flex items-center gap-2"><Activity size={16}/> Volumen Disponible</p>
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-5xl font-black text-emerald-600">{selectedItemDetail.qty}</p>
+                          <p className="text-xl font-bold text-emerald-700">{selectedItemDetail.unit}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Notas */}
+                    {selectedItemDetail.notes && (
+                      <div className="mb-8">
+                        <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><FileText size={18}/> Notas de Uso / Condiciones</h4>
+                        <div className="bg-yellow-50/50 p-5 rounded-2xl border border-yellow-100 text-slate-700 leading-relaxed">
+                          {selectedItemDetail.notes}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Enlace de Compra */}
+                    {selectedItemDetail.purchaseLink && (
+                      <a href={selectedItemDetail.purchaseLink} target="_blank" className="w-full sm:w-auto self-start px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 mb-8">
+                        <ExternalLink size={18}/> Ver Producto en Proveedor
+                      </a>
+                    )}
+
+                    {/* Historial Integrado en la Vista */}
+                    <div className="mt-auto pt-8 border-t border-slate-100">
+                      <h4 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><History size={20} className="text-indigo-500"/> Historial de Uso de esta Alícuota</h4>
+                      
+                      {abLogs.filter(log => log.itemId === selectedItemDetail.id).length === 0 ? (
+                        <p className="text-slate-400 text-sm italic">No hay registros de uso todavía.</p>
+                      ) : (
+                        <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                          {abLogs.filter(log => log.itemId === selectedItemDetail.id)
+                            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
+                            .map(log => (
+                            <div key={log.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} ${log.unit}`}
+                                  </span>
+                                  <span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(log.timestamp)}</span>
+                                </div>
+                                <p className="text-sm font-medium text-slate-700">{log.details}</p>
+                              </div>
+                              <div className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded border shadow-sm flex items-center gap-1 w-fit">
+                                <User size={12}/> {log.userEmail.split('@')[0]}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Modal Formulario Principal */}
             {showForm && currentUser.isSuperAdmin && (
@@ -359,7 +575,7 @@
                         <div className="sm:col-span-2">
                           <label className="block text-xs font-bold text-indigo-600 uppercase mb-1 tracking-wider">Anti (Especificidad/Target) *</label>
                           <input name="target" placeholder="ej. GAPDH, p53, GFP..." defaultValue={editingItem?.target || editingItem?.name} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-indigo-500 focus:bg-white focus:ring-2 ring-indigo-200 outline-none transition-all font-bold text-lg text-gray-800" />
-                          <input type="hidden" name="name" value={editingItem?.name || "Antibody"} /> {/* Fallback for older code logic */}
+                          <input type="hidden" name="name" value={editingItem?.name || "Antibody"} /> 
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Hospedero (Host) *</label>
@@ -462,146 +678,6 @@
                       </div>
                     </form>
                   </div>
-               </div>
-            )}
-
-            {/* Modal de Historial */}
-            {showHistory && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in border border-indigo-100">
-                    <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-3xl">
-                      <div>
-                        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                          <History className="text-indigo-600"/> Historial de Movimientos
-                        </h2>
-                        <p className="text-sm font-medium text-slate-500 mt-1">Anti-{showHistory.target || showHistory.name}</p>
-                      </div>
-                      <button onClick={() => setShowHistory(null)} className="p-2 bg-white border shadow-sm text-gray-600 hover:bg-gray-100 rounded-full transition-colors"><X size={20}/></button>
-                    </div>
-                    
-                    <div className="flex-1 p-6 overflow-y-auto bg-white">
-                      {abLogs.filter(log => log.itemId === showHistory.id).length === 0 ? (
-                        <div className="text-center py-10 text-gray-400">
-                          <Clock className="mx-auto mb-3 opacity-50" size={40}/>
-                          <p>No hay registros de movimientos aún.</p>
-                        </div>
-                      ) : (
-                        <div className="relative border-l-2 border-indigo-100 ml-3 md:ml-4 space-y-6 pb-4">
-                          {abLogs.filter(log => log.itemId === showHistory.id)
-                            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
-                            .map(log => (
-                            <div key={log.id} className="relative pl-6 md:pl-8">
-                              {/* Timeline dot */}
-                              <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ${log.action === 'consumido' ? 'bg-orange-500' : log.action === 'creado' ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                              
-                              <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-indigo-200 transition-colors">
-                                <div className="flex justify-between items-start mb-2">
-                                  <span className={`text-xs font-black uppercase tracking-wider px-2 py-1 rounded-md ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} ${log.unit}`}
-                                  </span>
-                                  <span className="text-xs font-medium text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(log.timestamp)}</span>
-                                </div>
-                                <p className="text-slate-700 text-sm font-medium mb-2">{log.details}</p>
-                                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                  <User size={12}/> {log.userEmail}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-               </div>
-            )}
-
-            {/* Grid de Anticuerpos */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {anticuerpos.filter(i => 
-                  (i.target || i.name).toLowerCase().includes(searchQuery.toLowerCase()) || 
-                  i.catalogNum?.includes(searchQuery) || 
-                  i.brand?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  i.host?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  i.locationBox?.toLowerCase().includes(searchQuery.toLowerCase())
-                ).map(item => (
-                <div key={item.id} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-300 transition-all duration-300 flex flex-col overflow-hidden group relative">
-                  
-                  {/* Badges de Identificación Top */}
-                  <div className="absolute top-3 right-3 flex flex-col gap-1 items-end z-10">
-                    <span className="bg-indigo-600/90 backdrop-blur text-white text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border border-indigo-500/50">Anti: {item.target || item.name}</span>
-                    <span className="bg-white/90 backdrop-blur text-indigo-700 text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border border-slate-200">Host: {item.host || 'N/A'}</span>
-                  </div>
-
-                  {/* Imagen */}
-                  <div className="h-40 bg-slate-50 relative flex items-center justify-center p-4 border-b border-slate-100">
-                    {item.imageUrl ? <img src={item.imageUrl} className="h-full object-contain mix-blend-multiply drop-shadow-md group-hover:scale-110 transition-transform duration-500" /> : <ImageIcon className="text-slate-300" size={56}/>}
-                  </div>
-                  
-                  <div className="p-5 flex flex-col flex-1">
-                    {/* Título Principal */}
-                    <h3 className="font-black text-gray-900 text-lg leading-tight mb-3 pr-2" title={item.target || item.name}>
-                      <span className="text-indigo-400 font-medium text-sm block -mb-1">Anti-</span>
-                      {item.target || item.name}
-                    </h3>
-                    
-                    {/* Metadatos */}
-                    <div className="space-y-2 text-xs text-gray-600 mb-4 flex-1">
-                      <p className="flex justify-between border-b border-slate-50 pb-1"><span className="font-bold text-slate-400">Marca</span> <span className="font-medium text-slate-700">{item.brand}</span></p>
-                      <p className="flex justify-between border-b border-slate-50 pb-1"><span className="font-bold text-slate-400">Catálogo</span> <span className="font-mono bg-slate-100 px-1 rounded text-slate-700">{item.catalogNum || '--'}</span></p>
-                      
-                      {/* Localización */}
-                      <div className="mt-3 bg-indigo-50/50 p-2 rounded-lg border border-indigo-50">
-                        <p className="text-[10px] uppercase font-bold text-indigo-400 flex items-center gap-1 mb-1"><MapPin size={12}/> Ubicación</p>
-                        <p className="font-medium text-indigo-900 truncate" title={item.locationLab}>{item.locationLab || 'No especificado'}</p>
-                        <p className="font-bold text-indigo-700">{item.locationBox || '--'}</p>
-                      </div>
-
-                      {/* Notas Collapsible (if exists) */}
-                      {item.notes && (
-                         <div className="mt-2 text-slate-500 bg-slate-50 p-2 rounded-lg text-[11px] line-clamp-2" title={item.notes}>
-                            <span className="font-bold text-slate-700 block mb-0.5"><FileText size={10} className="inline mr-1"/>Notas:</span>
-                            {item.notes}
-                         </div>
-                      )}
-                    </div>
-                    
-                    {/* Footer Actions & Stock */}
-                    <div className="flex items-end justify-between pt-4 border-t border-slate-100 mt-2">
-                      <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-bold">Disponible</p>
-                        <p className="text-2xl font-black text-emerald-600">{item.qty} <span className="text-xs font-bold text-slate-500">{item.unit}</span></p>
-                      </div>
-                      
-                      {currentUser && (
-                        <div className="flex gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
-                          {/* Botón Consumir */}
-                          <button onClick={() => setConsumeItem(item)} className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors shadow-sm" title="Registrar Uso / Descontar">
-                            <MinusCircle size={18}/>
-                          </button>
-                          {/* Botón Historial */}
-                          <button onClick={() => setShowHistory(item)} className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors shadow-sm" title="Ver Historial de Uso">
-                            <History size={18}/>
-                          </button>
-
-                          {currentUser.isSuperAdmin && (
-                            <>
-                              <button onClick={()=>{setEditingItem(item); setImagePreview(item.imageUrl); setShowForm(true);}} className="p-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"><Settings size={18}/></button>
-                              <button onClick={()=>handleDelete(item.id, item.name)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"><Trash2 size={18}/></button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {anticuerpos.length === 0 && !loading && (
-               <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-300">
-                  <Beaker className="mx-auto text-slate-300 mb-4" size={64}/>
-                  <h3 className="text-xl font-bold text-slate-500">No hay anticuerpos registrados</h3>
-                  <p className="text-slate-400 mt-2">Los elementos que agregues aparecerán aquí.</p>
                </div>
             )}
             
