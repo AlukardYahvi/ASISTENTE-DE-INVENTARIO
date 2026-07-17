@@ -30,7 +30,7 @@
 
     const { 
       Search, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, 
-      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Dna
+      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Dna, Tag, Calendar
     } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -61,12 +61,15 @@
       const [searchQuery, setSearchQuery] = useState('');
       const [loading, setLoading] = useState(true);
 
+      // Estados de Vistas
+      const [view, setView] = useState('catalog'); // 'catalog' o 'detail'
+      const [selectedItemDetail, setSelectedItemDetail] = useState(null); // Item a mostrar en detalle
+
       const [showForm, setShowForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
       const [imagePreview, setImagePreview] = useState(null);
       
       const [consumeItem, setConsumeItem] = useState(null);
-      const [showHistory, setShowHistory] = useState(null); 
 
       useEffect(() => {
         const initAuth = async () => {
@@ -95,7 +98,16 @@
         const invRef = collection(db, 'artifacts', appId, 'public', 'data', 'inv_oligos');
         const unsubInv = onSnapshot(invRef, 
           (snapshot) => {
-            setOligos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setOligos(data);
+            
+            // Si hay un item seleccionado, actualizarlo para reflejar cambios (ej. consumir)
+            if (selectedItemDetail) {
+               const updatedItem = data.find(i => i.id === selectedItemDetail.id);
+               if (updatedItem) setSelectedItemDetail(updatedItem);
+               else setView('catalog'); // Si se eliminó, regresar
+            }
+
             setLoading(false);
           },
           (error) => { console.error("Error al escuchar cambios: ", error); setLoading(false); }
@@ -110,7 +122,7 @@
         );
 
         return () => { unsubInv(); unsubLogs(); };
-      }, [currentUser]);
+      }, [currentUser, selectedItemDetail]);
 
       const handleImageUpload = (e) => {
         const file = e.target.files[0];
@@ -140,7 +152,7 @@
             action,
             details,
             amountTaken,
-            unit: 'viales', // Forzamos viales para la BD
+            unit: 'viales',
             userEmail: currentUser.email,
             timestamp: new Date().toISOString()
           });
@@ -155,9 +167,9 @@
         
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
-        data.qty = parseInt(data.qty, 10); // Parsear a número entero
+        data.qty = parseInt(data.qty, 10); 
         data.imageUrl = imagePreview || editingItem?.imageUrl || '';
-        data.sequence = data.sequence.toUpperCase().replace(/\s/g, ''); // Normalizar secuencia
+        data.sequence = data.sequence.toUpperCase().replace(/\s/g, ''); 
 
         if (!data.barcode) {
             data.barcode = `LAB-OL-${Date.now().toString(36).toUpperCase()}`;
@@ -210,6 +222,7 @@
         if (!currentUser?.isSuperAdmin) return;
         if (window.confirm(`¿Seguro que deseas eliminar el oligo "${name}" permanentemente?`)) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', id));
+          if(view === 'detail') setView('catalog'); // Salir del detalle si se borra
         }
       };
 
@@ -260,6 +273,11 @@
         return d.toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
       };
 
+      const openDetailView = (item) => {
+        setSelectedItemDetail(item);
+        setView('detail');
+      };
+
       // Filtrado de oligos
       const filteredOligos = oligos.filter(oligo => {
         const search = searchQuery.toLowerCase();
@@ -302,7 +320,7 @@
               </div>
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <a href="index.html" className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors font-bold flex items-center gap-2 backdrop-blur-sm"><ArrowLeft size={18}/> Dashboard</a>
-                {currentUser.isSuperAdmin && (
+                {currentUser.isSuperAdmin && view === 'catalog' && (
                   <button onClick={() => {setEditingItem(null); setImagePreview(null); setShowForm(true);}} className="flex-1 md:flex-none px-6 py-2 bg-white text-emerald-700 rounded-xl font-bold hover:bg-emerald-50 shadow-xl transition-all">
                     + Registrar Nuevo
                   </button>
@@ -313,26 +331,257 @@
 
           <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-16">
             
-            {/* Buscador y Herramientas */}
-            <div className="bg-white rounded-2xl shadow-md p-4 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border border-gray-100">
-              <div className="flex items-center gap-2 bg-slate-100 p-3 rounded-xl flex-1 w-full focus-within:ring-2 ring-emerald-500 transition-all">
-                <Search className="text-emerald-400 mx-2" size={20} />
-                <input 
-                  type="text" 
-                  placeholder="Buscar por Nombre, Secuencia, Especie, Caja o Marca..." 
-                  className="w-full bg-transparent outline-none font-medium text-gray-700" 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                />
-              </div>
-              {currentUser.isSuperAdmin && (
-                <button onClick={handlePrintAllLabels} className="px-5 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center gap-2 shadow-sm w-full md:w-auto justify-center transition-colors">
-                  <Printer size={18}/> Imprimir Catálogo
-                </button>
-              )}
-            </div>
+            {/* --- VISTA 1: CATÁLOGO --- */}
+            {view === 'catalog' && (
+              <div className="animate-fade-in">
+                {/* Buscador y Herramientas */}
+                <div className="bg-white rounded-2xl shadow-md p-4 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 border border-gray-100">
+                  <div className="flex items-center gap-2 bg-slate-100 p-3 rounded-xl flex-1 w-full focus-within:ring-2 ring-emerald-500 transition-all">
+                    <Search className="text-emerald-400 mx-2" size={20} />
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por Nombre, Secuencia, Especie, Caja o Marca..." 
+                      className="w-full bg-transparent outline-none font-medium text-gray-700" 
+                      value={searchQuery} 
+                      onChange={(e) => setSearchQuery(e.target.value)} 
+                    />
+                  </div>
+                  {currentUser.isSuperAdmin && (
+                    <button onClick={handlePrintAllLabels} className="px-5 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center gap-2 shadow-sm w-full md:w-auto justify-center transition-colors">
+                      <Printer size={18}/> Imprimir Catálogo
+                    </button>
+                  )}
+                </div>
 
-            {/* Modal Formulario Principal */}
+                {/* Grid Principal de Oligos */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredOligos.length === 0 ? (
+                    <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+                      <Search className="mx-auto text-gray-300 mb-4" size={48} />
+                      <h3 className="text-lg font-bold text-gray-600">No se encontraron oligos</h3>
+                      <p className="text-gray-400">Intenta con otros términos de búsqueda o registra uno nuevo.</p>
+                    </div>
+                  ) : (
+                    filteredOligos.map(oligo => (
+                      <div key={oligo.id} onClick={() => openDetailView(oligo)} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-emerald-300 transition-all duration-300 overflow-hidden flex flex-col group relative cursor-pointer">
+                        
+                        {/* Header de la Tarjeta (Imagen o Icono) */}
+                        <div className="h-28 bg-emerald-50 flex items-center justify-center relative overflow-hidden border-b border-emerald-100">
+                          {oligo.imageUrl ? (
+                            <img src={oligo.imageUrl} alt={oligo.name} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                          ) : (
+                            <div className="text-emerald-200">
+                              <Layers size={48} />
+                            </div>
+                          )}
+                          <div className="absolute top-2 right-2 flex gap-1 z-10">
+                            {/* Los botones rápidos de edición se quitan de la tarjeta principal para simplificar y forzar la entrada a Detail */}
+                          </div>
+                        </div>
+
+                        {/* Contenido de la Tarjeta */}
+                        <div className="p-5 flex-1 flex flex-col">
+                          <div className="flex justify-between items-start mb-1">
+                            <h3 className="font-black text-xl text-gray-800 line-clamp-1" title={oligo.name}>{oligo.name}</h3>
+                          </div>
+                          
+                          {/* Especie Badge */}
+                          <div className="mb-3">
+                            <span className="inline-block px-2 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-md uppercase tracking-wide border border-slate-200">
+                              {oligo.species || 'N/A'}
+                            </span>
+                          </div>
+                          
+                          {/* Secuencia (Estilo Código/ADN) */}
+                          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 mb-4">
+                            <div className="flex items-center gap-1 mb-1 text-[10px] uppercase font-bold text-emerald-600">
+                               <Dna size={12}/> Secuencia (5' → 3')
+                            </div>
+                            <p className="font-mono text-xs text-slate-700 dna-sequence tracking-wider font-medium">{oligo.sequence || '---'}</p>
+                          </div>
+
+                          {/* Info Localización */}
+                          <div className="space-y-2 mt-auto">
+                            <div className="flex items-start gap-2 text-sm text-gray-600">
+                              <MapPin size={16} className="text-emerald-500 mt-0.5 shrink-0"/>
+                              <div>
+                                <p className="font-medium text-slate-700">{oligo.locationLab || 'No asignado'}</p>
+                                <p className="text-xs text-slate-400 font-bold">{oligo.locationBox || '--'}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Footer de Tarjeta (Cantidad y Acciones) */}
+                          <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                            <div>
+                              <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">Disponible</p>
+                              <p className="font-black text-teal-700 text-lg leading-none">{oligo.qty} <span className="text-sm font-medium text-gray-500">{oligo.unit}</span></p>
+                            </div>
+                            
+                            {currentUser && (
+                              <div className="flex gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); setConsumeItem(oligo); }} className="px-3 py-2 bg-teal-100 text-teal-700 font-bold rounded-xl hover:bg-teal-600 hover:text-white transition-colors flex items-center gap-1 shadow-sm">
+                                  <MinusCircle size={16} /> Extraer
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* --- VISTA 2: DETALLE DEL ARTÍCULO (Ficha Técnica y Log) --- */}
+            {view === 'detail' && selectedItemDetail && (
+              <div className="animate-fade-in pb-10">
+                <button onClick={() => setView('catalog')} className="mb-6 px-4 py-2 bg-white text-emerald-600 font-bold rounded-xl shadow-sm border border-emerald-100 hover:bg-emerald-50 flex items-center gap-2 transition-colors">
+                  <ArrowLeft size={18}/> Volver al Catálogo
+                </button>
+
+                <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col lg:flex-row">
+                  {/* Lado Izquierdo: Imagen e Info Básica */}
+                  <div className="lg:w-1/3 bg-slate-50 border-r border-slate-100 p-8 flex flex-col items-center">
+                    <div className="bg-white w-full aspect-square rounded-2xl shadow-inner border-2 border-dashed border-slate-200 flex items-center justify-center p-4 mb-6 relative overflow-hidden">
+                      {selectedItemDetail.imageUrl ? (
+                        <img src={selectedItemDetail.imageUrl} alt={selectedItemDetail.name} className="w-full h-full object-contain" />
+                      ) : (
+                        <ImageIcon size={64} className="text-slate-300"/>
+                      )}
+                    </div>
+                    
+                    <div className="w-full text-center mb-6">
+                      <p className="text-emerald-500 font-bold uppercase tracking-widest text-xs mb-1">Nombre del Oligo</p>
+                      <h2 className="text-3xl font-black text-slate-800 leading-tight">{selectedItemDetail.name}</h2>
+                    </div>
+
+                    <div className="w-full bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                      <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Tag size={14}/> Especie</span>
+                        <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{selectedItemDetail.species || '--'}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-slate-50 pb-2">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Layers size={14}/> LAB ID</span>
+                        <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">{selectedItemDetail.barcode}</span>
+                      </div>
+                      <div className="flex justify-between items-center pb-2">
+                        <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Calendar size={14}/> Caducidad</span>
+                        <span className={`font-bold ${selectedItemDetail.expirationDate && new Date(selectedItemDetail.expirationDate) < new Date() ? 'text-red-500' : 'text-slate-700'}`}>
+                          {selectedItemDetail.expirationDate || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Lado Derecho: Detalles Completos y Acciones */}
+                  <div className="lg:w-2/3 p-8 flex flex-col">
+                    
+                    <div className="flex flex-wrap justify-between items-start gap-4 mb-6 border-b border-slate-100 pb-6">
+                      <div>
+                        <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">Sintetizador / Marca</p>
+                        <h3 className="text-2xl font-black text-slate-800 mb-2">{selectedItemDetail.brand}</h3>
+                        <p className="text-slate-500 font-medium text-sm">Catálogo: <span className="text-slate-700 font-mono">{selectedItemDetail.catalogNum || '--'}</span> | Lote: <span className="text-slate-700 font-mono">{selectedItemDetail.lotNum || '--'}</span></p>
+                      </div>
+                      
+                      {currentUser && (
+                        <div className="flex gap-2">
+                          <button onClick={() => setConsumeItem(selectedItemDetail)} className="px-4 py-2 bg-emerald-100 text-emerald-700 font-bold rounded-xl hover:bg-emerald-200 transition-colors shadow-sm flex items-center gap-2">
+                            <MinusCircle size={18}/> Consumir
+                          </button>
+                          {currentUser.isSuperAdmin && (
+                            <>
+                              <button onClick={() => {setEditingItem(selectedItemDetail); setImagePreview(selectedItemDetail.imageUrl); setShowForm(true);}} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2">
+                                <Settings size={18}/> Editar
+                              </button>
+                              <button onClick={() => handleDelete(selectedItemDetail.id, selectedItemDetail.name)} className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 hover:text-red-600 transition-colors shadow-sm">
+                                <Trash2 size={20}/>
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mb-6">
+                       <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Dna size={16}/> Secuencia Oligonucleótido</p>
+                       <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 font-mono text-emerald-900 dna-sequence text-lg tracking-widest font-bold">
+                         {selectedItemDetail.sequence}
+                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                      {/* Ubicación */}
+                      <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
+                        <p className="text-xs uppercase font-bold tracking-widest text-indigo-400 mb-2 flex items-center gap-2"><MapPin size={16}/> Localización Exacta</p>
+                        <p className="font-medium text-indigo-900 text-base mb-1">{selectedItemDetail.locationLab || 'No definido'}</p>
+                        <p className="font-black text-indigo-700 text-lg">{selectedItemDetail.locationBox || '--'}</p>
+                      </div>
+
+                      {/* Stock */}
+                      <div className="bg-teal-50 p-5 rounded-2xl border border-teal-100 flex flex-col justify-center">
+                        <p className="text-xs uppercase font-bold tracking-widest text-teal-500 mb-2 flex items-center gap-2"><Activity size={16}/> Inventario / Alícuotas</p>
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-4xl font-black text-teal-700">{selectedItemDetail.qty}</p>
+                          <p className="text-lg font-bold text-teal-600">{selectedItemDetail.unit}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Notas */}
+                    {selectedItemDetail.notes && (
+                      <div className="mb-8">
+                        <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><FileText size={18}/> Notas de Suspensión / Uso</h4>
+                        <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100 text-slate-700 leading-relaxed text-sm">
+                          {selectedItemDetail.notes}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Enlace de Compra */}
+                    {selectedItemDetail.purchaseLink && (
+                      <a href={selectedItemDetail.purchaseLink} target="_blank" className="w-full sm:w-auto self-start px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 mb-8">
+                        <ExternalLink size={18}/> Ver Producto en el Sintetizador (Proveedor)
+                      </a>
+                    )}
+
+                    {/* Historial Integrado en la Vista */}
+                    <div className="mt-auto pt-6 border-t border-slate-100">
+                      <h4 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><History size={20} className="text-emerald-600"/> Historial de Auditoría</h4>
+                      
+                      {oligoLogs.filter(log => log.itemId === selectedItemDetail.id).length === 0 ? (
+                        <p className="text-slate-400 text-sm italic">No hay registros de uso o modificación todavía.</p>
+                      ) : (
+                        <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                          {oligoLogs.filter(log => log.itemId === selectedItemDetail.id)
+                            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
+                            .map(log => (
+                            <div key={log.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} ${log.unit || 'viales'}`}
+                                  </span>
+                                  <span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(log.timestamp)}</span>
+                                </div>
+                                <p className="text-sm font-medium text-slate-700">{log.details}</p>
+                              </div>
+                              <div className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded border shadow-sm flex items-center gap-1 w-fit">
+                                <User size={12}/> {log.userEmail.split('@')[0]}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Formulario Principal (Crear/Editar) */}
             {showForm && currentUser.isSuperAdmin && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-fade-in relative border border-emerald-100">
@@ -404,9 +653,15 @@
 
                       {/* Cantidad y Notas */}
                       <div className="space-y-4">
-                        <div>
-                          <label className="block text-xs font-bold text-teal-600 uppercase mb-1 tracking-wider">Número de Viales *</label>
-                          <input type="number" step="1" min="0" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-teal-700 focus:border-teal-500 outline-none bg-teal-50" />
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-teal-600 uppercase mb-1 tracking-wider">Número de Viales *</label>
+                            <input type="number" step="1" min="0" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-teal-700 focus:border-teal-500 outline-none bg-teal-50" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Unidad (Vol/Masa) *</label>
+                            <input name="unit" placeholder="ej. nmoles" defaultValue={editingItem?.unit || 'nmoles'} required className="w-full p-3 border border-slate-200 rounded-xl text-center outline-none" />
+                          </div>
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-orange-500 uppercase mb-1 tracking-wider">Caducidad (Opcional)</label>
@@ -466,148 +721,7 @@
                   </div>
                </div>
             )}
-
-            {/* Modal de Historial */}
-            {showHistory && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-fade-in border border-emerald-100">
-                    <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-3xl">
-                      <div>
-                        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                          <History className="text-emerald-600"/> Historial de Movimientos
-                        </h2>
-                        <p className="text-sm font-medium text-slate-500 mt-1">{showHistory.name}</p>
-                      </div>
-                      <button onClick={() => setShowHistory(null)} className="p-2 bg-white border shadow-sm text-gray-600 hover:bg-gray-100 rounded-full transition-colors"><X size={20}/></button>
-                    </div>
-                    
-                    <div className="flex-1 p-6 overflow-y-auto bg-white">
-                      {oligoLogs.filter(log => log.itemId === showHistory.id).length === 0 ? (
-                        <div className="text-center py-10 text-gray-400">
-                          <Clock className="mx-auto mb-3 opacity-50" size={40}/>
-                          <p>No hay registros de movimientos aún.</p>
-                        </div>
-                      ) : (
-                        <div className="relative border-l-2 border-emerald-100 ml-3 md:ml-4 space-y-6 pb-4">
-                          {oligoLogs.filter(log => log.itemId === showHistory.id)
-                            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))
-                            .map(log => (
-                            <div key={log.id} className="relative pl-6 md:pl-8">
-                              {/* Timeline dot */}
-                              <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ${log.action === 'consumido' ? 'bg-orange-500' : log.action === 'creado' ? 'bg-teal-500' : 'bg-blue-500'}`}></div>
-                              
-                              <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl hover:border-emerald-200 transition-colors">
-                                <div className="flex justify-between items-start mb-2">
-                                  <span className={`text-xs font-black uppercase tracking-wider px-2 py-1 rounded-md ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} vial(es)`}
-                                  </span>
-                                  <span className="text-xs font-medium text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(log.timestamp)}</span>
-                                </div>
-                                <p className="text-slate-700 text-sm font-medium mb-2">{log.details}</p>
-                                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                                  <User size={12}/> {log.userEmail}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-               </div>
-            )}
-
-            {/* Grid Principal de Oligos */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredOligos.length === 0 ? (
-                <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
-                  <Search className="mx-auto text-gray-300 mb-4" size={48} />
-                  <h3 className="text-lg font-bold text-gray-600">No se encontraron oligos</h3>
-                  <p className="text-gray-400">Intenta con otros términos de búsqueda o registra uno nuevo.</p>
-                </div>
-              ) : (
-                filteredOligos.map(oligo => (
-                  <div key={oligo.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col group relative">
-                    
-                    {/* Header de la Tarjeta (Imagen o Icono) */}
-                    <div className="h-28 bg-emerald-50 flex items-center justify-center relative overflow-hidden border-b border-emerald-100">
-                      {oligo.imageUrl ? (
-                        <img src={oligo.imageUrl} alt={oligo.name} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                      ) : (
-                        <div className="text-emerald-200">
-                          <Layers size={48} />
-                        </div>
-                      )}
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        {currentUser.isSuperAdmin && (
-                          <>
-                            <button onClick={() => {setEditingItem(oligo); setImagePreview(oligo.imageUrl); setShowForm(true);}} className="p-2 bg-white/90 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white backdrop-blur-sm shadow-sm transition-colors">
-                              <Pencil size={14} />
-                            </button>
-                            <button onClick={() => handleDelete(oligo.id, oligo.name)} className="p-2 bg-white/90 text-red-500 rounded-lg hover:bg-red-500 hover:text-white backdrop-blur-sm shadow-sm transition-colors">
-                              <Trash2 size={14} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Contenido de la Tarjeta */}
-                    <div className="p-5 flex-1 flex flex-col">
-                      <div className="flex justify-between items-start mb-1">
-                        <h3 className="font-black text-xl text-gray-800 line-clamp-1" title={oligo.name}>{oligo.name}</h3>
-                      </div>
-                      
-                      {/* Especie Badge */}
-                      <div className="mb-3">
-                        <span className="inline-block px-2 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-md uppercase tracking-wide">
-                          {oligo.species || 'N/A'}
-                        </span>
-                      </div>
-                      
-                      {/* Secuencia (Estilo Código/ADN) */}
-                      <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 mb-4">
-                        <div className="flex items-center gap-1 mb-1 text-[10px] uppercase font-bold text-emerald-600">
-                           <Dna size={12}/> Secuencia (5' → 3')
-                        </div>
-                        <p className="font-mono text-xs text-slate-700 dna-sequence tracking-wider font-medium">{oligo.sequence || '---'}</p>
-                      </div>
-
-                      {/* Info Localización */}
-                      <div className="space-y-2 mt-auto">
-                        <div className="flex items-start gap-2 text-sm text-gray-600">
-                          <MapPin size={16} className="text-emerald-500 mt-0.5 shrink-0"/>
-                          <div>
-                            <p className="font-medium">{oligo.locationLab}</p>
-                            <p className="text-xs text-gray-400">{oligo.locationBox}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Footer de Tarjeta (Cantidad y Acciones) */}
-                      <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Disponible</p>
-                          <p className="font-black text-teal-700 text-lg">{oligo.qty} <span className="text-sm font-medium text-gray-500">vial{oligo.qty !== 1 ? 'es' : ''}</span></p>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                          <button onClick={() => setShowHistory(oligo)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors tooltip" title="Ver Historial">
-                            <History size={20} />
-                          </button>
-                          {currentUser.isSuperAdmin && (
-                            <button onClick={() => setConsumeItem(oligo)} className="px-3 py-2 bg-teal-100 text-teal-700 font-bold rounded-xl hover:bg-teal-600 hover:text-white transition-colors flex items-center gap-1 shadow-sm">
-                              <MinusCircle size={16} /> Usar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
+            
           </div>
         </div>
       );
