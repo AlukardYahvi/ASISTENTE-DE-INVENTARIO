@@ -39,7 +39,7 @@
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
       Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2,
-      Dna, TestTubes
+      Dna, TestTubes // Íconos para sub-inventarios
     } = LucideIcons;
 
     const MIS_CREDENCIALES_FIREBASE = {
@@ -90,6 +90,7 @@
       const [selectedFolder, setSelectedFolder] = useState(null);
       const [showItemForm, setShowItemForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
+      const [viewingItem, setViewingItem] = useState(null); // NUEVO ESTADO PARA DETALLES
       const [generatedQR, setGeneratedQR] = useState('');
       const [imagePreview, setImagePreview] = useState(null); 
 
@@ -484,9 +485,6 @@
         );
       }
 
-      const lowStockItems = inventory.filter(item => item.qty < item.minThreshold);
-      const expiringItems = getExpiringSoonItems();
-
       return (
         <div className="flex h-screen bg-slate-50 font-sans text-gray-900">
           {/* SIDEBAR */}
@@ -512,9 +510,9 @@
               <a href="inventario_oligos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
                 <Dna size={20} /> Inv. Oligos
               </a>
-              <a href="inventario_muestras.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <LayoutGrid size={20} /> Cajas y Muestras
-              </a>
+              <a href="inventario_de_muestras_y_biobanco.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
+  <LayoutGrid size={20} /> Cajas y Muestras
+</a>
 
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
               <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white border border-slate-600' : 'hover:bg-slate-800'}`}><ClipboardSignature size={20} /> Historial Operativo</button>
@@ -725,7 +723,8 @@
                                     {item.stockType === 'jar' && <p className={`text-sm font-black ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty}%</p>}
                                   </div>
                                   <div className="flex gap-1 flex-shrink-0">
-                                    <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><ScanLine size={18}/></button>
+                                    <button onClick={()=>setViewingItem(item)} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100" title="Ver Detalles"><Info size={18}/></button>
+                                    <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Auditar"><ScanLine size={18}/></button>
                                     {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode||''); setShowItemForm(true);}} className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-200"><Settings size={18}/></button>}
                                     {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
                                        <button onClick={()=>handleDeleteItem(item.id, item.name)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100" title="Eliminar Base de Datos"><Trash2 size={18} /></button>
@@ -774,6 +773,7 @@
                                    </td>
                                    <td className="p-4">
                                       <div className="flex justify-center gap-2">
+                                        <button onClick={()=>setViewingItem(item)} className="text-emerald-600 bg-emerald-50 p-2.5 rounded-lg hover:bg-emerald-100" title="Ver Detalles"><Info size={18}/></button>
                                         <button onClick={()=>handlePrintLabel(item)} className="text-purple-600 bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100" title="Imprimir"><Printer size={18}/></button>
                                         <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="text-blue-600 bg-blue-50 p-2.5 rounded-lg hover:bg-blue-100" title="Auditar"><ScanLine size={18}/></button>
                                         {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode || ''); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2.5 rounded-lg hover:bg-gray-200" title="Editar"><Settings size={18} /></button>}
@@ -788,6 +788,62 @@
                            </tbody>
                          </table>
                        </div>
+                    )}
+
+                    {/* === MODAL DE DETALLES DEL ITEM === */}
+                    {viewingItem && (
+                      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 animate-fade-in overflow-y-auto">
+                        <div className="bg-white rounded-3xl max-w-3xl w-full p-8 relative shadow-2xl my-auto">
+                          <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"><X size={24}/></button>
+                          
+                          <div className="flex flex-col md:flex-row gap-6 mb-6">
+                            <div className="w-full md:w-1/3 h-48 bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
+                              {viewingItem.imageUrl ? <img src={viewingItem.imageUrl} className="w-full h-full object-cover"/> : <ImageIcon size={64} className="text-gray-300"/>}
+                            </div>
+                            <div className="flex-1">
+                              <h2 className="text-3xl font-black text-gray-900 mb-2">{viewingItem.name}</h2>
+                              <p className="text-sm text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg inline-block border"><QrCode size={14} className="inline mr-2"/>{viewingItem.barcode}</p>
+                              
+                              <div className="mt-4 grid grid-cols-2 gap-4">
+                                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                                  <p className="text-xs uppercase font-bold text-blue-500 mb-1">Stock Actual</p>
+                                  <p className="text-2xl font-black text-blue-900">{viewingItem.qty} <span className="text-sm font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                  <p className="text-xs uppercase font-bold text-gray-500 mb-1">Stock Mínimo</p>
+                                  <p className="text-2xl font-black text-gray-700">{viewingItem.minThreshold} <span className="text-sm font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-6">
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Categoría</p><p className="font-medium text-gray-900">{viewingItem.category}</p></div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Ubicación</p><p className="font-medium text-gray-900">{viewingItem.location}</p></div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Proveedor</p><p className="font-medium text-gray-900">{viewingItem.provider || '--'}</p></div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Marca</p><p className="font-medium text-gray-900">{viewingItem.brand || '--'}</p></div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Catálogo</p><p className="font-medium text-gray-900">{viewingItem.catalogNum || '--'}</p></div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Lote</p><p className="font-medium text-gray-900">{viewingItem.lotNum || '--'}</p></div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Caducidad</p><p className={`font-medium ${viewingItem.expirationDate && new Date(viewingItem.expirationDate) < new Date() ? 'text-red-600 font-bold' : 'text-gray-900'}`}>{viewingItem.expirationDate || '--'}</p></div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Estado Pedido</p><p className="font-medium text-gray-900 uppercase">{viewingItem.orderStatus === 'ordered' ? '📦 En Camino' : (viewingItem.orderStatus === 'received' ? '✅ Recibido' : 'Normal')}</p></div>
+                          </div>
+
+                          {viewingItem.observations && (
+                            <div className="mt-6 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+                              <p className="text-xs font-bold text-yellow-700 uppercase mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones</p>
+                              <p className="text-sm text-yellow-900">{viewingItem.observations}</p>
+                            </div>
+                          )}
+
+                          {viewingItem.purchaseLink && (
+                            <div className="mt-6 pt-6 border-t border-gray-100 text-center">
+                              <a href={viewingItem.purchaseLink} target="_blank" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors">
+                                <ExternalLink size={18}/> Ver Enlace de Compra
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
                  </div>
               )}
