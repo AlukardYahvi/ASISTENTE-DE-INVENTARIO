@@ -29,7 +29,7 @@
 
     const { 
       Search, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, 
-      Beaker, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Info, Calendar, Tag, Layers
+      Beaker, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Info, Calendar, Tag, Layers, AlertCircle
     } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -167,24 +167,6 @@
         }
       };
 
-      // --- NUEVO CÓDIGO AÑADIDO: FUNCIÓN PARA SEMÁFORO Y NOTAS RÁPIDAS ---
-      // Esta función permite actualizar los nuevos campos sin afectar el resto del documento
-      const updateStockAlert = async (itemId, type, value) => {
-        if (!currentUser) return; // Cualquier usuario logueado puede usarlo
-        try {
-          const updateData = type === 'status' ? { stockStatus: value } : { stockNotes: value };
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos', itemId), updateData, { merge: true });
-          
-          if (type === 'status') {
-             // Opcional: registrar en el historial que alguien cambió el semáforo manualmente
-             await logAction(itemId, selectedItemDetail.target || selectedItemDetail.name, 'modificado', `Cambio manual de alerta visual a: ${value}`);
-          }
-        } catch (e) {
-          console.error("Error actualizando alerta de stock:", e);
-        }
-      };
-      // ------------------------------------------------------------------
-
       const handleSave = async (e) => {
         e.preventDefault();
         if (!currentUser || !currentUser.isSuperAdmin) return alert("Solo los administradores autorizados pueden añadir elementos.");
@@ -247,6 +229,23 @@
         if (window.confirm("¿Seguro que deseas eliminar este anticuerpo permanentemente?")) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos', id));
           if(view === 'detail') setView('catalog'); // Salir de la vista detalle si se borra
+        }
+      };
+
+      // Nuevas funciones para el Semáforo y Notas Rápidas
+      const updateStockStatus = async (itemId, status) => {
+        try {
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos', itemId), { stockStatus: status }, { merge: true });
+        } catch (err) {
+          console.error("Error al actualizar el estado: ", err);
+        }
+      };
+
+      const updateQuickNotes = async (itemId, notes) => {
+        try {
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos', itemId), { quickNotes: notes }, { merge: true });
+        } catch (err) {
+          console.error("Error al guardar la nota: ", err);
         }
       };
 
@@ -343,6 +342,7 @@
 
           <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-16">
             
+            {}
             {/* VISTA 1: CATÁLOGO */}
             {view === 'catalog' && (
               <div className="animate-fade-in">
@@ -368,6 +368,13 @@
                     ).map(item => (
                     <div key={item.id} onClick={() => openDetailView(item)} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-indigo-300 transition-all duration-300 flex flex-col overflow-hidden group cursor-pointer relative">
                       
+                      {/* Indicador sutil de semáforo en catálogo */}
+                      <div className="absolute top-3 left-3 z-20">
+                        {item.stockStatus === 'red' && <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white" title="Nivel crítico"></div>}
+                        {item.stockStatus === 'yellow' && <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-sm border border-white" title="Nivel bajo"></div>}
+                        {item.stockStatus === 'green' && <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white" title="Nivel óptimo"></div>}
+                      </div>
+
                       <div className="absolute top-3 right-3 flex flex-col gap-1 items-end z-10 pointer-events-none">
                         <span className="bg-indigo-600/90 backdrop-blur text-white text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border border-indigo-500/50">Anti: {item.target || item.name}</span>
                         <span className="bg-white/90 backdrop-blur text-indigo-700 text-[10px] font-black uppercase px-2 py-1 rounded-lg shadow-sm border border-slate-200">Host: {item.host || 'N/A'}</span>
@@ -396,12 +403,7 @@
                         
                         <div className="flex items-end justify-between pt-4 border-t border-slate-100 mt-2">
                           <div>
-                            {/* --- MODIFICACIÓN MENOR: Puntos de alerta en el catálogo para visualización rápida --- */}
-                            <p className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
-                                Disponible 
-                                {item.stockStatus === 'red' && <span className="w-2 h-2 rounded-full bg-red-500 shadow-sm" title="Stock Crítico"></span>}
-                                {item.stockStatus === 'yellow' && <span className="w-2 h-2 rounded-full bg-yellow-400 shadow-sm" title="Stock Bajo / Precaución"></span>}
-                            </p>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">Disponible</p>
                             <p className="text-2xl font-black text-emerald-600">{item.qty} <span className="text-xs font-bold text-slate-500">{item.unit}</span></p>
                           </div>
                           
@@ -505,7 +507,7 @@
                         <p className="font-black text-indigo-700 text-xl">{selectedItemDetail.locationBox || 'Caja no especificada'}</p>
                       </div>
 
-                      {/* Stock numérico */}
+                      {/* Stock */}
                       <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center">
                         <p className="text-xs uppercase font-bold tracking-widest text-emerald-500 mb-2 flex items-center gap-2"><Activity size={16}/> Volumen Disponible</p>
                         <div className="flex items-baseline gap-2">
@@ -515,53 +517,53 @@
                       </div>
                     </div>
 
-                    {/* --- NUEVO CÓDIGO: ÁREA DE SEMÁFORO Y NOTAS RÁPIDAS --- */}
+                    {/* NUEVO: SEMÁFORO Y NOTAS RÁPIDAS DE ESTADO DEL TUBO */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                        {/* Semáforo Interactivo */}
-                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center items-center">
-                            <p className="text-xs uppercase font-bold tracking-widest text-slate-500 mb-4 flex items-center gap-2">
-                               <AlertCircle size={16} className="text-slate-400" /> Alerta Visual de Remanente
-                            </p>
-                            <div className="flex gap-6 items-center justify-center">
-                                <button
-                                    onClick={() => updateStockAlert(selectedItemDetail.id, 'status', 'red')}
-                                    className={`w-12 h-12 rounded-full border-4 outline-none transition-all duration-300 ${selectedItemDetail.stockStatus === 'red' ? 'bg-red-500 border-red-200 scale-110 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-slate-100 border-transparent hover:bg-red-200'}`}
-                                    title="Marcar como Crítico / Casi Agotado"
-                                ></button>
-                                <button
-                                    onClick={() => updateStockAlert(selectedItemDetail.id, 'status', 'yellow')}
-                                    className={`w-12 h-12 rounded-full border-4 outline-none transition-all duration-300 ${selectedItemDetail.stockStatus === 'yellow' ? 'bg-yellow-400 border-yellow-200 scale-110 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : 'bg-slate-100 border-transparent hover:bg-yellow-200'}`}
-                                    title="Marcar como Poco / Precaución"
-                                ></button>
-                                <button
-                                    onClick={() => updateStockAlert(selectedItemDetail.id, 'status', 'green')}
-                                    className={`w-12 h-12 rounded-full border-4 outline-none transition-all duration-300 ${(!selectedItemDetail.stockStatus || selectedItemDetail.stockStatus === 'green') ? 'bg-emerald-500 border-emerald-200 scale-110 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-slate-100 border-transparent hover:bg-emerald-200'}`}
-                                    title="Marcar como Suficiente"
-                                ></button>
-                            </div>
+                      {/* Semáforo de Estado */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                        <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                          <AlertCircle size={18} className="text-slate-400" /> Alerta Visual de Contenido
+                        </h4>
+                        <div className="flex justify-around items-center px-4">
+                          <button 
+                            onClick={() => updateStockStatus(selectedItemDetail.id, 'green')} 
+                            className={`w-12 h-12 rounded-full transition-all duration-300 ${selectedItemDetail.stockStatus === 'green' || !selectedItemDetail.stockStatus ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.6)] scale-110 border-2 border-white' : 'bg-green-100 hover:bg-green-200'}`}
+                            title="Nivel Óptimo / Lleno"
+                          ></button>
+                          <button 
+                            onClick={() => updateStockStatus(selectedItemDetail.id, 'yellow')} 
+                            className={`w-12 h-12 rounded-full transition-all duration-300 ${selectedItemDetail.stockStatus === 'yellow' ? 'bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.6)] scale-110 border-2 border-white' : 'bg-yellow-100 hover:bg-yellow-200'}`}
+                            title="Nivel Medio / Bajo"
+                          ></button>
+                          <button 
+                            onClick={() => updateStockStatus(selectedItemDetail.id, 'red')} 
+                            className={`w-12 h-12 rounded-full transition-all duration-300 ${selectedItemDetail.stockStatus === 'red' ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)] scale-110 border-2 border-white' : 'bg-red-100 hover:bg-red-200'}`}
+                            title="Nivel Crítico / Casi Vacío"
+                          ></button>
                         </div>
+                        <p className="text-center text-xs text-slate-400 mt-4 italic">Haz clic para actualizar el nivel del tubo físico.</p>
+                      </div>
 
-                        {/* Notas Rápidas de Stock */}
-                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                            <p className="text-xs uppercase font-bold tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-                                <FileText size={16} className="text-slate-400"/> Notas de cantidad restante
-                            </p>
-                            <textarea
-                                defaultValue={selectedItemDetail.stockNotes || ''}
-                                onBlur={(e) => updateStockAlert(selectedItemDetail.id, 'notes', e.target.value)}
-                                placeholder="Ej. Queda aprox 1/4 del tubo, o 'Alcanza para 2 WB'..."
-                                className="w-full flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-indigo-500 focus:bg-white focus:ring-2 ring-indigo-200 outline-none resize-none text-sm text-slate-700 transition-all"
-                            ></textarea>
-                            <p className="text-[10px] text-slate-400 text-right mt-2">* Se guarda al salir del cuadro</p>
-                        </div>
+                      {/* Notas Rápidas */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                        <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                          <FileText size={18} className="text-slate-400" /> Notas sobre el Stock
+                        </h4>
+                        <textarea 
+                          defaultValue={selectedItemDetail.quickNotes || ''} 
+                          onBlur={(e) => updateQuickNotes(selectedItemDetail.id, e.target.value)}
+                          placeholder="Ej: Queda aprox. la mitad del tubo..." 
+                          className="w-full flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-indigo-500 focus:bg-white outline-none resize-none text-sm text-slate-700 placeholder-slate-400"
+                        ></textarea>
+                        <p className="text-right text-[10px] text-slate-400 mt-1">Se guarda al salir del cuadro</p>
+                      </div>
                     </div>
-                    {/* --- FIN NUEVO CÓDIGO --- */}
 
-                    {/* Notas Técnicas / Generales */}
+                    {/* Notas Originales del Catálogo */}
                     {selectedItemDetail.notes && (
                       <div className="mb-8">
-                        <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><FileText size={18}/> Notas Técnicas / Uso / Condiciones</h4>
-                        <div className="bg-yellow-50/50 p-5 rounded-2xl border border-yellow-100 text-slate-700 leading-relaxed">
+                        <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><Info size={18} className="text-indigo-400"/> Notas Generales del Anticuerpo</h4>
+                        <div className="bg-yellow-50/50 p-5 rounded-2xl border border-yellow-100 text-slate-700 leading-relaxed text-sm">
                           {selectedItemDetail.notes}
                         </div>
                       </div>
@@ -569,7 +571,7 @@
 
                     {/* Enlace de Compra */}
                     {selectedItemDetail.purchaseLink && (
-                      <a href={selectedItemDetail.purchaseLink} target="_blank" className="w-full sm:w-auto self-start px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 mb-8">
+                      <a href={selectedItemDetail.purchaseLink} target="_blank" className="w-full sm:w-auto self-start px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 mb-8 text-sm">
                         <ExternalLink size={18}/> Ver Producto en Proveedor
                       </a>
                     )}
@@ -701,7 +703,7 @@
 
                     {/* Notas / Observaciones */}
                     <div className="border-t border-slate-100 pt-6">
-                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider"><FileText size={14} className="inline mr-1"/>Notas / Observaciones de Uso</label>
+                       <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider"><Info size={14} className="inline mr-1"/>Notas Generales / Observaciones</label>
                        <textarea name="notes" defaultValue={editingItem?.notes} rows="2" placeholder="Ej. Recomendado dilución 1:1000 para Western Blot. Sensible a luz." className="w-full p-3 border border-slate-200 rounded-xl focus:border-indigo-500 outline-none resize-none"></textarea>
                     </div>
 
