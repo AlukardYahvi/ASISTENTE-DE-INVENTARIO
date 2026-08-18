@@ -30,7 +30,7 @@
 
     const { 
       Search, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, 
-      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Dna, Tag, Calendar, AlertCircle
+      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Dna, Tag, Calendar, AlertCircle, AlertTriangle
     } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -205,6 +205,22 @@
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { quickNotes: notes }, { merge: true });
         } catch (err) {
           console.error("Error al guardar la nota: ", err);
+        }
+      };
+
+      const toggleWarningStatus = async (itemId, currentStatus) => {
+        try {
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { hasWarning: !currentStatus }, { merge: true });
+        } catch (err) {
+          console.error("Error al actualizar la alerta: ", err);
+        }
+      };
+
+      const updateWarningNotes = async (itemId, notes) => {
+        try {
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { warningNotes: notes }, { merge: true });
+        } catch (err) {
+          console.error("Error al guardar la nota de alerta: ", err);
         }
       };
 
@@ -387,6 +403,15 @@
                           {oligo.stockStatus === 'yellow' && <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-sm border border-white" title="Nivel bajo"></div>}
                           {oligo.stockStatus === 'green' && <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white" title="Nivel óptimo"></div>}
                         </div>
+
+                        {/* Indicador de Alerta/Problema */}
+                        {oligo.hasWarning && (
+                          <div className="absolute top-3 right-3 z-20 animate-pulse">
+                             <div className="bg-red-500 text-white px-2 py-1 rounded-md text-[10px] font-black uppercase flex items-center gap-1 shadow-md border border-red-600" title="Problema de Calidad / BLAST">
+                               <AlertTriangle size={12} /> Alerta
+                             </div>
+                          </div>
+                        )}
 
                         {/* Header de la Tarjeta (Imagen o Icono) */}
                         <div className="h-28 bg-emerald-50 flex items-center justify-center relative overflow-hidden border-b border-emerald-100">
@@ -589,6 +614,37 @@
                         ></textarea>
                         <p className="text-right text-[10px] text-slate-400 mt-1">Se guarda al salir del cuadro</p>
                       </div>
+                    </div>
+
+                    {/* NUEVO: ALERTA DE CONTROL DE CALIDAD / BLAST */}
+                    <div className={`p-5 rounded-2xl border shadow-sm flex flex-col mb-8 transition-colors duration-300 ${selectedItemDetail.hasWarning ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className={`text-sm font-bold flex items-center gap-2 ${selectedItemDetail.hasWarning ? 'text-red-700' : 'text-slate-700'}`}>
+                          <AlertTriangle size={18} className={selectedItemDetail.hasWarning ? 'text-red-500' : 'text-slate-400'} /> 
+                          Reporte de Problemas / Inespecificidad (BLAST)
+                        </h4>
+                        <button 
+                          onClick={() => toggleWarningStatus(selectedItemDetail.id, selectedItemDetail.hasWarning)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${selectedItemDetail.hasWarning ? 'bg-red-600 text-white shadow-md hover:bg-red-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        >
+                          {selectedItemDetail.hasWarning ? 'Desactivar Alerta' : 'Activar Alerta'}
+                        </button>
+                      </div>
+                      
+                      {selectedItemDetail.hasWarning ? (
+                        <div className="animate-fade-in mt-3 flex flex-col">
+                          <textarea 
+                            defaultValue={selectedItemDetail.warningNotes || ''} 
+                            onBlur={(e) => updateWarningNotes(selectedItemDetail.id, e.target.value)}
+                            placeholder="Describe detalladamente el problema (ej. BLAST indica homología con gen X, amplificación inespecífica en PCR...)" 
+                            className="w-full flex-1 p-3 bg-white border border-red-200 rounded-xl focus:border-red-500 focus:ring-2 ring-red-100 outline-none resize-none text-sm text-red-900 placeholder-red-300"
+                            rows="3"
+                          ></textarea>
+                          <p className="text-right text-[10px] text-red-400 mt-1 font-medium">El reporte se guarda al salir del cuadro de texto</p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 mt-1">Activa la alerta si detectas problemas de alineamiento o inespecificidad en laboratorio.</p>
+                      )}
                     </div>
 
                     {/* Notas originales de catálogo */}
