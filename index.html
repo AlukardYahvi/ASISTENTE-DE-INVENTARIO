@@ -67,13 +67,12 @@
       { id: 'consumibles', name: 'Consumibles Generales', icon: '📦', color: 'bg-amber-100 text-amber-700' }
     ];
 
-    // ERROR CORREGIDO AQUI: Faltaba la coma despues de cgomez
     const SUPER_ADMIN_EMAILS = [
       'yahvi.edsel.hernandez@gmail.com',
       'asistentelicam@gmail.com',
       'nnajerag@ipn.mx',
       'cgomezm310393@gmail.com',
-      'avalentinavegab@gmail.com'
+      'avalentinaregab@gmail.com'
     ];
 
     function LabInventoryApp() {
@@ -248,7 +247,6 @@
       // --- DERIVADOS (AHORA BASADOS EN ALERTA MANUAL) ---
       const isAdmin = currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin';
       
-      // La lista de compras y dashboard ahora usa las alertas manuales, no el cálculo de threshold (según petición)
       const alertedItems = inventory.filter(item => item.manualAlert === true);
       
       const getExpiringSoonItems = () => {
@@ -267,8 +265,8 @@
           newQty = item.qty + (addAmount > 0 ? addAmount : item.minThreshold);
           updateData.qty = newQty;
           updateData.orderStatus = 'pending';
-          updateData.manualAlert = false; // Se apaga la alerta al recibir
-          updateData.sealStatus = 'sealed'; // Entra como nuevo y sellado
+          updateData.manualAlert = false; 
+          updateData.sealStatus = 'sealed'; 
           
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
             itemId: item.id, itemName: item.name, action: 'add', amount: newQty - item.qty, reason: 'Recepción de Pedido Nuevo',
@@ -296,7 +294,7 @@ Por medio del presente correo, me dirijo a usted para solicitar formalmente la c
 
 --- ENLACES Y REFERENCIAS ---
 • Enlace sugerido de compra: ${item.purchaseLink || 'No especificado en sistema'}
-• Referencia Visual (Foto 1): ${item.imageUrls?.[0] || 'No se subió fotografía'}
+• Referencia Visual (Foto): ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
 
 Quedo a su entera disposición en caso de requerir información adicional o especificaciones para proceder con el trámite.
 
@@ -320,7 +318,6 @@ ${currentUserData.name}
            const newStatus = currentStatus === 'sealed' ? 'in_use' : 'sealed';
            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id), { sealStatus: newStatus }, { merge: true });
            
-           // Opcional: Registrar en el log que se abrió
            if(newStatus === 'in_use') {
              await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
                itemId: id, itemName: viewingItem?.name || 'Artículo', action: 'update', amount: 0, reason: 'Se abrió / Comenzó a usarse',
@@ -465,7 +462,6 @@ ${currentUserData.name}
         if (generatedQR && !itemData.barcode) itemData.barcode = generatedQR;
         if (!itemData.orderStatus) itemData.orderStatus = 'pending';
         
-        // Guardar Arreglo de Imágenes (se eliminó la lógica de una sola imagen)
         itemData.imageUrls = imagePreviews;
         itemData.sealStatus = formSealStatus;
         if(editingItem && editingItem.manualAlert !== undefined) {
@@ -844,6 +840,9 @@ ${currentUserData.name}
                                     <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Auditar / Gastar"><ScanLine size={18}/></button>
                                     {isAdmin && <button onClick={() => setReassignItem(item)} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-200" title="Reubicar de Categoría"><ArrowRightLeft size={18}/></button>}
                                     {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode||''); setShowItemForm(true);}} className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-200"><Settings size={18}/></button>}
+                                    {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
+                                      <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id, item.name); }} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-200" title="Eliminar Base de Datos"><Trash2 size={18}/></button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -897,7 +896,7 @@ ${currentUserData.name}
                                         {isAdmin && <button onClick={() => setReassignItem(item)} className="text-purple-600 bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100" title="Reubicar de Categoría"><ArrowRightLeft size={18} /></button>}
                                         {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode || ''); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2.5 rounded-lg hover:bg-gray-200" title="Editar"><Settings size={18} /></button>}
                                         {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
-                                          <button onClick={()=>handleDeleteItem(item.id, item.name)} className="text-red-600 bg-red-50 p-2.5 rounded-lg hover:bg-red-100" title="Eliminar Base de Datos"><Trash2 size={18} /></button>
+                                          <button onClick={(e)=> { e.stopPropagation(); handleDeleteItem(item.id, item.name); }} className="text-red-600 bg-red-50 p-2.5 rounded-lg hover:bg-red-100" title="Eliminar Base de Datos"><Trash2 size={18} /></button>
                                         )}
                                       </div>
                                    </td>
@@ -968,6 +967,15 @@ ${currentUserData.name}
                                       <Bell size={16} className={viewingItem.manualAlert ? 'animate-pulse' : ''}/>
                                       {viewingItem.manualAlert ? 'Desactivar Alerta' : 'Activar Alerta'}
                                     </button>
+
+                                    {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
+                                      <button 
+                                        onClick={() => { handleDeleteItem(viewingItem.id, viewingItem.name); setViewingItem(null); }}
+                                        className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center gap-2 transition-all mt-2"
+                                      >
+                                        <Trash2 size={16}/> Eliminar Elemento
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -978,7 +986,7 @@ ${currentUserData.name}
                                   <p className="text-3xl font-black text-blue-900">{viewingItem.qty} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
                                 </div>
                                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
-                                  <p className="text-xs uppercase font-bold text-gray-500 mb-1">Stock Mínimo</p>
+                                  <p className="text-xs uppercase font-bold text-gray-500 mb-1">Stock Mínimo Sugerido</p>
                                   <p className="text-3xl font-black text-gray-700">{viewingItem.minThreshold} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
                                 </div>
                               </div>
