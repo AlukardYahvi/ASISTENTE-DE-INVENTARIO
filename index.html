@@ -39,7 +39,7 @@
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
       Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2,
-      Dna, TestTubes // Íconos para sub-inventarios
+      Dna, TestTubes, FlaskConical // Ícono FlaskConical agregado para Reactivos
     } = LucideIcons;
 
     const MIS_CREDENCIALES_FIREBASE = {
@@ -90,7 +90,7 @@
       const [selectedFolder, setSelectedFolder] = useState(null);
       const [showItemForm, setShowItemForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
-      const [viewingItem, setViewingItem] = useState(null); // NUEVO ESTADO PARA DETALLES
+      const [viewingItem, setViewingItem] = useState(null);
       const [generatedQR, setGeneratedQR] = useState('');
       const [imagePreview, setImagePreview] = useState(null); 
 
@@ -273,7 +273,6 @@
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
-      // Función para imprimir una lista masiva (Catálogo minucioso)
       const handlePrintAllLabels = () => {
         const printWindow = window.open('', '_blank');
         const itemsToPrint = selectedFolder ? inventory.filter(i => i.category === selectedFolder) : inventory;
@@ -510,9 +509,12 @@
               <a href="inventario_oligos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
                 <Dna size={20} /> Inv. Oligos
               </a>
+              <a href="reactivos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
+                <FlaskConical size={20} /> Inv. Reactivos y Mat.
+              </a>
               <a href="inventario_de_muestras_y_biobanco.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-  <LayoutGrid size={20} /> Cajas y Muestras
-</a>
+                <LayoutGrid size={20} /> Cajas y Muestras
+              </a>
 
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
               <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white border border-slate-600' : 'hover:bg-slate-800'}`}><ClipboardSignature size={20} /> Historial Operativo</button>
@@ -543,7 +545,7 @@
                 <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''}><LayoutDashboard/></button>
                 <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-400' : ''}><Folder/></button>
                 <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''}><ScanLine/></button>
-                <a href="inventario_muestras.html" title="Cajas y Muestras" className="text-gray-400 hover:text-blue-400"><LayoutGrid size={24}/></a>
+                <a href="reactivos.html" title="Reactivos" className="text-gray-400 hover:text-blue-400"><FlaskConical size={24}/></a>
               </div>
             </header>
 
