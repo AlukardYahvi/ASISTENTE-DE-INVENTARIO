@@ -39,7 +39,7 @@
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
       Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2,
-      Dna, TestTubes, FlaskConical, ArrowRightLeft // Ícono ArrowRightLeft agregado para Reasignar
+      Dna, TestTubes, FlaskConical, ArrowRightLeft, Package, PackageOpen, Bell, BellRing, Trash
     } = LucideIcons;
 
     const MIS_CREDENCIALES_FIREBASE = {
@@ -67,11 +67,12 @@
       { id: 'consumibles', name: 'Consumibles Generales', icon: '📦', color: 'bg-amber-100 text-amber-700' }
     ];
 
+    // ERROR CORREGIDO AQUI: Faltaba la coma despues de cgomez
     const SUPER_ADMIN_EMAILS = [
       'yahvi.edsel.hernandez@gmail.com',
       'asistentelicam@gmail.com',
       'nnajerag@ipn.mx',
-      'cgomezm310393@gmail.com'
+      'cgomezm310393@gmail.com',
       'avalentinaregab@gmail.com'
     ];
 
@@ -94,7 +95,7 @@
       const [viewingItem, setViewingItem] = useState(null);
       const [reassignItem, setReassignItem] = useState(null);
       const [generatedQR, setGeneratedQR] = useState('');
-      const [imagePreview, setImagePreview] = useState(null); 
+      const [imagePreviews, setImagePreviews] = useState([]); 
 
       const [scanInput, setScanInput] = useState('');
       const [scannedItem, setScannedItem] = useState(null);
@@ -105,6 +106,7 @@
       const [cameraActiveForm, setCameraActiveForm] = useState(false);
       const [viewMode, setViewMode] = useState('table');
       const [formStockType, setFormStockType] = useState('unit');
+      const [formSealStatus, setFormSealStatus] = useState('sealed');
       
       const scannerInputRef = useRef(null);
       const hiddenSubmitBtnRef = useRef(null);
@@ -141,7 +143,14 @@
 
         const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
         const unsubInv = onSnapshot(inventoryRef, (snapshot) => {
-          setInventory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setInventory(data);
+          
+          if(viewingItem) {
+             const updated = data.find(i => i.id === viewingItem.id);
+             if(updated) setViewingItem(updated);
+             else setViewingItem(null);
+          }
           setLoading(false);
         });
 
@@ -164,9 +173,8 @@
         });
 
         return () => { unsubInv(); unsubUsers(); unsubLogs(); };
-      }, [firebaseUser]);
+      }, [firebaseUser, viewingItem]);
 
-      // --- CAMARAS ---
       useEffect(() => {
         let html5QrcodeScanner;
         if (cameraActive && activeTab === 'scanner') {
@@ -190,66 +198,85 @@
         return () => { if (formScanner) formScanner.clear().catch(()=>{}); };
       }, [cameraActiveForm, showItemForm]);
 
-      // --- MANEJO DE IMÁGENES Y FORMULARIO ---
+      // --- MANEJO DE IMÁGENES (MULTIPLE) Y FORMULARIO ---
       useEffect(() => {
         if (showItemForm && editingItem) {
-          setImagePreview(editingItem.imageUrl || null);
+          const loadedImages = editingItem.imageUrls ? [...editingItem.imageUrls] : (editingItem.imageUrl ? [editingItem.imageUrl] : []);
+          setImagePreviews(loadedImages);
           setFormStockType(editingItem.stockType || 'unit');
+          setFormSealStatus(editingItem.sealStatus || 'sealed');
         } else if (!showItemForm) {
-          setImagePreview(null);
+          setImagePreviews([]);
           setFormStockType('unit');
+          setFormSealStatus('sealed');
         }
       }, [showItemForm, editingItem]);
 
       const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 500; const MAX_HEIGHT = 500;
-            let width = img.width; let height = img.height;
-            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
-            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-            canvas.width = width; canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            setImagePreview(dataUrl);
-          }
-          img.src = event.target.result;
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        if (imagePreviews.length + files.length > 4) {
+           return alert("Puedes subir un máximo de 4 fotografías por artículo.");
         }
-        reader.readAsDataURL(file);
+
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX_WIDTH = 600; const MAX_HEIGHT = 600;
+              let width = img.width; let height = img.height;
+              if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
+              else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+              canvas.width = width; canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, width, height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+              setImagePreviews(prev => [...prev, dataUrl].slice(0, 4));
+            }
+            img.src = event.target.result;
+          }
+          reader.readAsDataURL(file);
+        });
       };
 
-      // --- DERIVADOS ---
+      const removeImagePreview = (indexToRemove) => {
+         setImagePreviews(prev => prev.filter((_, idx) => idx !== indexToRemove));
+      };
+
+      // --- DERIVADOS (AHORA BASADOS EN ALERTA MANUAL) ---
       const isAdmin = currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin';
-      const lowStockItems = inventory.filter(item => item.qty < item.minThreshold);
+      
+      // La lista de compras y dashboard ahora usa las alertas manuales, no el cálculo de threshold (según petición)
+      const alertedItems = inventory.filter(item => item.manualAlert === true);
+      
       const getExpiringSoonItems = () => {
         const today = new Date(); const thirtyDays = new Date(); thirtyDays.setDate(today.getDate() + 30);
         return inventory.filter(i => i.expirationDate && new Date(i.expirationDate) <= thirtyDays && new Date(i.expirationDate) >= today).sort((a,b) => new Date(a.expirationDate) - new Date(b.expirationDate));
       };
       const expiringItems = getExpiringSoonItems();
 
-     // --- FUNCIONES COMPRAS ---
       const handleOrderStatusChange = async (item, newStatus) => {
         if (!isAdmin) return alert("Solo administradores.");
         let newQty = item.qty;
+        let updateData = { orderStatus: newStatus };
+
         if (newStatus === 'received') {
           const addAmount = (item.minThreshold * 2) - item.qty; 
           newQty = item.qty + (addAmount > 0 ? addAmount : item.minThreshold);
-          newStatus = 'pending'; 
+          updateData.qty = newQty;
+          updateData.orderStatus = 'pending';
+          updateData.manualAlert = false; // Se apaga la alerta al recibir
+          updateData.sealStatus = 'sealed'; // Entra como nuevo y sellado
           
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
-            itemId: item.id, itemName: item.name, action: 'add', amount: newQty - item.qty, reason: 'Recepción de Pedido',
+            itemId: item.id, itemName: item.name, action: 'add', amount: newQty - item.qty, reason: 'Recepción de Pedido Nuevo',
             userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
           });
           alert(`¡Pedido recibido! Se han ingresado ${newQty - item.qty} ${item.stockType === 'jar' ? '%' : item.unit} al inventario.`);
         }
-        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', item.id), { orderStatus: newStatus, qty: newQty }, { merge: true }); } catch (e) { alert("Error."); }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', item.id), updateData, { merge: true }); } catch (e) { alert("Error."); }
       };
 
       const handleSendPurchaseRequest = (item) => {
@@ -258,18 +285,18 @@
         
         const bodyText = `Estimada Dra. Nayelli Nájera,
 
-Por medio del presente correo, me dirijo a usted para solicitar formalmente la compra o reabastecimiento del siguiente artículo, el cual ha alcanzado un nivel crítico en el inventario del laboratorio.
+Por medio del presente correo, me dirijo a usted para solicitar formalmente la compra o reabastecimiento del siguiente artículo, el cual ha sido reportado con alerta de stock o caducidad en el inventario del laboratorio.
 
 --- DETALLES TÉCNICOS DEL ARTÍCULO ---
 • Producto / Reactivo: ${item.name}
 • Categoría: ${item.category || 'N/A'}
 • Proveedor y Marca: ${item.provider || 'N/A'} / ${item.brand || 'N/A'}
 • Número de Catálogo: ${item.catalogNum || 'N/A'}
-• Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo de seguridad es ${item.minThreshold})
+• Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo sugerido es ${item.minThreshold})
 
 --- ENLACES Y REFERENCIAS ---
 • Enlace sugerido de compra: ${item.purchaseLink || 'No especificado en sistema'}
-• Fotografía / Referencia Visual: ${item.imageUrl || 'No se subió fotografía'}
+• Referencia Visual (Foto 1): ${item.imageUrls?.[0] || 'No se subió fotografía'}
 
 Quedo a su entera disposición en caso de requerir información adicional o especificaciones para proceder con el trámite.
 
@@ -282,15 +309,35 @@ ${currentUserData.name}
         handleOrderStatusChange(item, 'ordered');
       };
 
-      // --- FUNCIONES EXPORTAR (RESPALDO Y ETIQUETAS) ---
+      const toggleManualAlert = async (id, currentStatus) => {
+         try {
+           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id), { manualAlert: !currentStatus }, { merge: true });
+         } catch(e) { console.error(e); }
+      };
+
+      const toggleSealStatus = async (id, currentStatus) => {
+         try {
+           const newStatus = currentStatus === 'sealed' ? 'in_use' : 'sealed';
+           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id), { sealStatus: newStatus }, { merge: true });
+           
+           // Opcional: Registrar en el log que se abrió
+           if(newStatus === 'in_use') {
+             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
+               itemId: id, itemName: viewingItem?.name || 'Artículo', action: 'update', amount: 0, reason: 'Se abrió / Comenzó a usarse',
+               userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
+             });
+           }
+         } catch(e) { console.error(e); }
+      };
+
       // --- FUNCIONES EXPORTAR (RESPALDO Y ETIQUETAS) ---
       const handleExportCSV = () => {
         if (!isAdmin) return alert("Solo administradores.");
-        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Cantidad', 'Tipo_Stock', 'Unidad', 'Minimo', 'Ubicacion', 'Caducidad', 'Enlace_Compra', 'Observaciones'];
+        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Cantidad', 'Estado', 'Tipo_Stock', 'Unidad', 'Alerta_Manual', 'Ubicacion', 'Caducidad'];
         const rows = inventory.map(i => [
           `"${i.barcode||i.id}"`, `"${i.name}"`, `"${i.category}"`, 
           `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, `"${i.provider||''}"`, `"${i.brand||''}"`, 
-          i.qty, `"${i.stockType||'unit'}"`, `"${i.unit}"`, i.minThreshold, `"${i.location}"`, `"${i.expirationDate||''}"`, `"${i.purchaseLink||''}"`, `"${i.observations||''}"`
+          i.qty, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.stockType||'unit'}"`, `"${i.unit}"`, `"${i.manualAlert ? 'SI' : 'NO'}"`, `"${i.location}"`, `"${i.expirationDate||''}"`
         ]);
         const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -370,7 +417,6 @@ ${currentUserData.name}
         try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', userId), { role: newRole }, { merge: true }); } catch(e) {}
       };
 
-      // --- CRUD ---
       const generateUniqueQR = () => {
         let code = ''; let isUnique = false;
         while (!isUnique) {
@@ -418,7 +464,15 @@ ${currentUserData.name}
         itemData.minThreshold = Number(itemData.minThreshold);
         if (generatedQR && !itemData.barcode) itemData.barcode = generatedQR;
         if (!itemData.orderStatus) itemData.orderStatus = 'pending';
-        itemData.imageUrl = imagePreview || editingItem?.imageUrl || '';
+        
+        // Guardar Arreglo de Imágenes (se eliminó la lógica de una sola imagen)
+        itemData.imageUrls = imagePreviews;
+        itemData.sealStatus = formSealStatus;
+        if(editingItem && editingItem.manualAlert !== undefined) {
+           itemData.manualAlert = editingItem.manualAlert;
+        } else {
+           itemData.manualAlert = false;
+        }
 
         const docId = editingItem ? editingItem.id : `item_${Date.now()}`;
         try {
@@ -429,7 +483,7 @@ ${currentUserData.name}
               userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
             });
           }
-          setShowItemForm(false); setEditingItem(null); setGeneratedQR(''); setImagePreview(null);
+          setShowItemForm(false); setEditingItem(null); setGeneratedQR(''); setImagePreviews([]);
         } catch (err) { alert("Error: " + err.message); }
       };
 
@@ -616,9 +670,10 @@ ${currentUserData.name}
                       <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Boxes size={32}/></div>
                       <div><p className="text-sm text-gray-500 font-bold uppercase">Elementos</p><p className="text-4xl font-black text-gray-800">{inventory.length}</p></div>
                     </div>
+                    {/* Alertas Manuales reemplazan "Bajo Stock" Automático */}
                     <div onClick={() => setActiveTab('orders')} className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md">
-                      <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><AlertTriangle size={32}/></div>
-                      <div><p className="text-sm text-gray-500 font-bold uppercase">Bajo Stock</p><p className="text-4xl font-black text-red-600">{lowStockItems.length}</p></div>
+                      <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><BellRing size={32} className="animate-pulse" /></div>
+                      <div><p className="text-sm text-gray-500 font-bold uppercase">Alertas Manuales</p><p className="text-4xl font-black text-red-600">{alertedItems.length}</p></div>
                     </div>
                     <div className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5">
                       <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><Calendar size={32}/></div>
@@ -628,29 +683,31 @@ ${currentUserData.name}
                 </div>
               )}
 
-              {/* --- MÓDULO COMPRAS --- */}
+              {/* --- MÓDULO COMPRAS (Ahora basado en alertas manuales) --- */}
               {activeTab === 'orders' && (
                 <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="bg-indigo-600 p-3 rounded-xl text-white shadow-lg"><CreditCard size={28}/></div>
                     <div>
-                      <h2 className="text-3xl font-black text-gray-900">Módulo de Compras</h2>
-                      <p className="text-gray-500">Solicita, rastrea y reabastece automáticamente tu inventario.</p>
+                      <h2 className="text-3xl font-black text-gray-900">Módulo de Compras y Alertas</h2>
+                      <p className="text-gray-500">Elementos marcados manualmente por los usuarios como críticos o agotados.</p>
                     </div>
                   </div>
                   
                   <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 min-h-[500px]">
-                    {lowStockItems.length === 0 && inventory.filter(i => i.orderStatus === 'ordered').length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-64 text-gray-400"><CheckCircle2 size={64} className="text-green-400 mb-4"/><p className="text-xl font-bold">Todo está bajo control.</p><p>No hay reactivos por debajo del límite mínimo.</p></div>
+                    {alertedItems.length === 0 && inventory.filter(i => i.orderStatus === 'ordered').length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-64 text-gray-400"><CheckCircle2 size={64} className="text-green-400 mb-4"/><p className="text-xl font-bold">Todo está bajo control.</p><p>No hay artículos marcados con alerta manual.</p></div>
                     ) : (
                       <div className="space-y-4">
-                        {lowStockItems.filter(i => i.orderStatus !== 'ordered').map(item => (
+                        {alertedItems.filter(i => i.orderStatus !== 'ordered').map(item => (
                           <div key={item.id} className="flex justify-between items-center p-5 bg-red-50 border border-red-100 rounded-2xl">
                             <div className="flex gap-4 items-center">
-                              <AlertTriangle className="text-red-500" size={24}/>
+                              <BellRing className="text-red-500 animate-pulse" size={24}/>
                               <div>
-                                <h3 className="font-bold text-gray-900 text-lg">{item.name}</h3>
-                                <p className="text-sm text-gray-600">Stock: <strong className="text-red-600">{item.qty} {item.stockType === 'jar' ? '%' : item.unit}</strong> (Mínimo: {item.minThreshold}) | Prov: {item.provider || 'N/A'} | Cat: {item.catalogNum || 'N/A'}</p>
+                                <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
+                                  {item.name} <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded uppercase font-black">Alerta Activada</span>
+                                </h3>
+                                <p className="text-sm text-gray-600">Stock Reportado: <strong className="text-red-600">{item.qty} {item.stockType === 'jar' ? '%' : item.unit}</strong> | Prov: {item.provider || 'N/A'} | Cat: {item.catalogNum || 'N/A'}</p>
                               </div>
                             </div>
                             {isAdmin && (
@@ -707,13 +764,14 @@ ${currentUserData.name}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {CATEGORIES.map(folder => {
                        const items = inventory.filter(i => i.category === folder.name);
-                       const alerts = items.filter(i => i.qty < i.minThreshold).length;
+                       // Alertas ahora basadas en la bandera manual
+                       const alerts = items.filter(i => i.manualAlert).length;
                        return (
                         <div key={folder.id} onClick={() => setSelectedFolder(folder.name)} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200 cursor-pointer hover:shadow-xl hover:border-blue-400 transition-all group relative overflow-hidden">
                           <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-transparent to-gray-50 rounded-bl-full -z-10 group-hover:to-blue-50 transition-colors"></div>
                           <div className="flex justify-between items-start mb-6">
                             <div className={`p-5 rounded-2xl text-4xl inline-block shadow-sm ${folder.color} group-hover:scale-110 transition-transform`}>{folder.icon}</div>
-                            {alerts > 0 && <span className="bg-red-100 text-red-700 text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm"><AlertTriangle size={14}/> {alerts} alertas</span>}
+                            {alerts > 0 && <span className="bg-red-100 text-red-700 text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm"><Bell size={14}/> {alerts} alertas</span>}
                           </div>
                           <h3 className="text-xl font-bold text-gray-800 mb-1">{folder.name}</h3>
                           <p className="text-gray-500 font-medium">{items.length} productos</p>
@@ -754,37 +812,38 @@ ${currentUserData.name}
                     {viewMode === 'grid' && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-20">
                         {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || i.lotNum?.includes(searchQuery) || i.catalogNum?.includes(searchQuery))).map(item => {
-                          const isLow = item.qty < item.minThreshold;
+                          const displayImg = item.imageUrls?.[0] || item.imageUrl;
+                          
                           return (
-                            <div key={item.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-xl transition-shadow flex flex-col">
-                              <div className="h-40 bg-gray-100 relative">
-                                {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon size={48}/></div>}
-                                {isLow && <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-md">¡Reponer!</span>}
+                            <div key={item.id} className={`bg-white rounded-2xl border-2 ${item.manualAlert ? 'border-red-300 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border-transparent shadow-sm'} overflow-hidden hover:shadow-xl hover:border-blue-300 transition-all flex flex-col relative`}>
+                              
+                              {/* --- ETIQUETAS FLOTANTES DE ESTADO --- */}
+                              <div className="absolute top-2 left-2 flex gap-1 z-10">
+                                {item.sealStatus === 'in_use' ? (
+                                   <span className="bg-amber-100/90 text-amber-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-amber-200 flex items-center gap-1"><PackageOpen size={10}/> En Uso</span>
+                                ) : (
+                                   <span className="bg-emerald-100/90 text-emerald-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-emerald-200 flex items-center gap-1"><Package size={10}/> Sellado</span>
+                                )}
+                              </div>
+                              {item.manualAlert && <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-md flex items-center gap-1 z-10 animate-pulse"><Bell size={10}/> Alerta</span>}
+
+                              <div className="h-40 bg-gray-100 relative cursor-pointer" onClick={() => setViewingItem(item)}>
+                                {displayImg ? <img src={displayImg} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon size={48}/></div>}
                               </div>
                               <div className="p-4 flex-1 flex flex-col">
-                                <h3 className="font-bold text-gray-900 text-lg mb-1 line-clamp-2">{item.name}</h3>
+                                <h3 className="font-bold text-gray-900 text-lg mb-1 line-clamp-2 cursor-pointer hover:text-blue-600" onClick={() => setViewingItem(item)}>{item.name}</h3>
                                 <p className="text-xs text-gray-500 font-mono mb-1"><QrCode size={12} className="inline mr-1"/>{item.barcode}</p>
                                 <p className="text-xs text-gray-500 mb-3">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
                                 <div className="mt-auto pt-3 border-t border-gray-100 flex justify-between items-end">
                                   <div className="w-full">
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Stock</p>
-                                    {item.stockType === 'jar' ? (
-                                       <div className="w-full bg-gray-200 rounded-full h-2 mb-1 mt-1 max-w-[120px]">
-                                         <div className={`h-2 rounded-full ${isLow ? 'bg-red-500' : 'bg-blue-500'}`} style={{width: `${Math.min(item.qty, 100)}%`}}></div>
-                                       </div>
-                                    ) : (
-                                       <p className={`text-2xl font-black ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty} <span className="text-sm font-medium text-gray-500">{item.unit}</span></p>
-                                    )}
-                                    {item.stockType === 'jar' && <p className={`text-sm font-black ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty}%</p>}
+                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Stock Físico</p>
+                                    <p className="text-2xl font-black text-gray-800">{item.qty} <span className="text-sm font-medium text-gray-500">{item.stockType === 'jar' ? '%' : item.unit}</span></p>
                                   </div>
                                   <div className="flex gap-1 flex-shrink-0">
                                     <button onClick={()=>setViewingItem(item)} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100" title="Ver Detalles"><Info size={18}/></button>
-                                    <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Auditar"><ScanLine size={18}/></button>
+                                    <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Auditar / Gastar"><ScanLine size={18}/></button>
                                     {isAdmin && <button onClick={() => setReassignItem(item)} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-200" title="Reubicar de Categoría"><ArrowRightLeft size={18}/></button>}
                                     {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode||''); setShowItemForm(true);}} className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-200"><Settings size={18}/></button>}
-                                    {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
-                                       <button onClick={()=>handleDeleteItem(item.id, item.name)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100" title="Eliminar Base de Datos"><Trash2 size={18} /></button>
-                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -798,20 +857,23 @@ ${currentUserData.name}
                     {viewMode === 'table' && (
                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-x-auto pb-20">
                          <table className="w-full text-left whitespace-nowrap">
-                           <thead className="bg-gray-50/80 sticky top-0 border-b border-gray-200">
-                             <tr><th className="p-4 text-xs uppercase font-bold text-gray-500">Producto</th><th className="p-4 text-xs uppercase font-bold text-gray-500">Detalles</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-right">Stock</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-center">Acciones</th></tr>
+                           <thead className="bg-gray-50/80 sticky top-0 border-b border-gray-200 z-10">
+                             <tr><th className="p-4 text-xs uppercase font-bold text-gray-500">Producto</th><th className="p-4 text-xs uppercase font-bold text-gray-500">Detalles</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-center">Estado</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-right">Stock</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-center">Acciones</th></tr>
                            </thead>
                            <tbody className="divide-y divide-gray-100">
                              {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || i.lotNum?.includes(searchQuery) || i.catalogNum?.includes(searchQuery))).map(item => {
-                               const isLow = item.qty < item.minThreshold;
+                               const displayImg = item.imageUrls?.[0] || item.imageUrl;
                                return (
-                                 <tr key={item.id} className="hover:bg-blue-50/30">
-                                   <td className="p-4 flex items-center gap-4 min-w-[250px]">
+                                 <tr key={item.id} className={`hover:bg-blue-50/30 ${item.manualAlert ? 'bg-red-50/20' : ''}`}>
+                                   <td className="p-4 flex items-center gap-4 min-w-[250px] cursor-pointer" onClick={()=>setViewingItem(item)}>
                                      <div className="w-12 h-12 rounded bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                       {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover"/> : <ImageIcon className="text-gray-400" size={20}/>}
+                                       {displayImg ? <img src={displayImg} className="w-full h-full object-cover"/> : <ImageIcon className="text-gray-400" size={20}/>}
                                      </div>
                                      <div>
-                                       <p className="font-bold text-gray-900">{item.name}</p>
+                                       <p className="font-bold text-gray-900 flex items-center gap-2">
+                                         {item.name} 
+                                         {item.manualAlert && <Bell size={14} className="text-red-500"/>}
+                                       </p>
                                        <p className="text-xs text-gray-500 font-mono"><QrCode size={12} className="inline mr-1"/>{item.barcode}</p>
                                      </div>
                                    </td>
@@ -819,13 +881,13 @@ ${currentUserData.name}
                                      <p className="mt-1">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
                                      {item.expirationDate && <p className="text-orange-600 mt-1 flex items-center gap-1 font-bold"><Calendar size={12}/> Vence: {item.expirationDate}</p>}
                                    </td>
+                                   <td className="p-4 text-center">
+                                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${item.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        {item.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}
+                                      </span>
+                                   </td>
                                    <td className="p-4 text-right">
-                                     {item.stockType === 'jar' ? (
-                                        <div className="w-full bg-gray-200 rounded-full h-2.5 max-w-[100px] ml-auto mb-1">
-                                          <div className={`h-2.5 rounded-full ${isLow ? 'bg-red-500' : 'bg-blue-600'}`} style={{width: `${Math.min(item.qty, 100)}%`}}></div>
-                                        </div>
-                                     ) : null}
-                                     <span className={`font-black text-xl ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty} {item.stockType === 'jar' ? '%' : item.unit}</span>
+                                     <span className="font-black text-xl text-gray-800">{item.qty} <span className="text-sm font-medium text-gray-500">{item.stockType === 'jar' ? '%' : item.unit}</span></span>
                                    </td>
                                    <td className="p-4">
                                       <div className="flex justify-center gap-2">
@@ -850,38 +912,81 @@ ${currentUserData.name}
                     {/* === MODAL DE DETALLES DEL ITEM === */}
                     {viewingItem && (
                       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 animate-fade-in overflow-y-auto">
-                        <div className="bg-white rounded-3xl max-w-3xl w-full p-8 relative shadow-2xl my-auto">
-                          <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"><X size={24}/></button>
+                        <div className="bg-white rounded-3xl max-w-4xl w-full p-8 relative shadow-2xl my-auto">
+                          <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors z-20"><X size={24}/></button>
                           
-                          <div className="flex flex-col md:flex-row gap-6 mb-6">
-                            <div className="w-full md:w-1/3 h-48 bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
-                              {viewingItem.imageUrl ? <img src={viewingItem.imageUrl} className="w-full h-full object-cover"/> : <ImageIcon size={64} className="text-gray-300"/>}
+                          {/* Banner superior si hay alerta manual */}
+                          {viewingItem.manualAlert && (
+                            <div className="bg-red-500 text-white p-3 -mx-8 -mt-8 mb-6 rounded-t-3xl flex items-center justify-center gap-2 font-black uppercase tracking-wider text-sm shadow-md">
+                              <AlertTriangle size={18} className="animate-pulse" /> ALERTA DE STOCK / INCIDENCIA REPORTADA
                             </div>
+                          )}
+                          
+                          <div className="flex flex-col md:flex-row gap-8 mb-6">
+                            
+                            {/* GALERÍA DE IMÁGENES (Soporta múltiples) */}
+                            <div className="w-full md:w-1/3 flex flex-col gap-3">
+                               <div className="w-full aspect-square bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
+                                 {(viewingItem.imageUrls && viewingItem.imageUrls.length > 0) || viewingItem.imageUrl ? (
+                                   <img src={viewingItem.imageUrls ? viewingItem.imageUrls[0] : viewingItem.imageUrl} className="w-full h-full object-cover"/> 
+                                 ) : <ImageIcon size={64} className="text-gray-300"/>}
+                               </div>
+                               {/* Miniaturas si hay mas de 1 */}
+                               {viewingItem.imageUrls && viewingItem.imageUrls.length > 1 && (
+                                  <div className="grid grid-cols-3 gap-2">
+                                     {viewingItem.imageUrls.slice(1).map((imgUrl, i) => (
+                                       <div key={i} className="aspect-square bg-gray-100 rounded-lg overflow-hidden border">
+                                          <img src={imgUrl} className="w-full h-full object-cover opacity-80 hover:opacity-100 cursor-zoom-in" onClick={() => window.open(imgUrl, '_blank')}/>
+                                       </div>
+                                     ))}
+                                  </div>
+                               )}
+                            </div>
+
                             <div className="flex-1">
-                              <h2 className="text-3xl font-black text-gray-900 mb-2">{viewingItem.name}</h2>
-                              <p className="text-sm text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg inline-block border"><QrCode size={14} className="inline mr-2"/>{viewingItem.barcode}</p>
-                              
-                              <div className="mt-4 grid grid-cols-2 gap-4">
-                                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
-                                  <p className="text-xs uppercase font-bold text-blue-500 mb-1">Stock Actual</p>
-                                  <p className="text-2xl font-black text-blue-900">{viewingItem.qty} <span className="text-sm font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
+                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                                <div>
+                                  <h2 className="text-3xl font-black text-gray-900 mb-2">{viewingItem.name}</h2>
+                                  <p className="text-sm text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg inline-block border"><QrCode size={14} className="inline mr-2"/>{viewingItem.barcode}</p>
                                 </div>
-                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
+
+                                {/* BOTONES ESTADO Y ALERTA (Interactivos) */}
+                                {isAdmin && (
+                                  <div className="flex flex-col gap-2 shrink-0">
+                                    <button 
+                                      onClick={() => toggleSealStatus(viewingItem.id, viewingItem.sealStatus)}
+                                      className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200'}`}
+                                    >
+                                      {viewingItem.sealStatus === 'in_use' ? <PackageOpen size={16}/> : <Package size={16}/>}
+                                      {viewingItem.sealStatus === 'in_use' ? 'Marcar Sellado' : 'Marcar en Uso'}
+                                    </button>
+                                    
+                                    <button 
+                                      onClick={() => toggleManualAlert(viewingItem.id, viewingItem.manualAlert)}
+                                      className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.manualAlert ? 'bg-red-600 text-white hover:bg-red-700 border-red-700 shadow-md' : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}
+                                    >
+                                      <Bell size={16} className={viewingItem.manualAlert ? 'animate-pulse' : ''}/>
+                                      {viewingItem.manualAlert ? 'Desactivar Alerta' : 'Activar Alerta'}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="mt-6 grid grid-cols-2 gap-4">
+                                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                                  <p className="text-xs uppercase font-bold text-blue-500 mb-1">Stock Físico Actual</p>
+                                  <p className="text-3xl font-black text-blue-900">{viewingItem.qty} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
+                                </div>
+                                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
                                   <p className="text-xs uppercase font-bold text-gray-500 mb-1">Stock Mínimo</p>
-                                  <p className="text-2xl font-black text-gray-700">{viewingItem.minThreshold} <span className="text-sm font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
+                                  <p className="text-3xl font-black text-gray-700">{viewingItem.minThreshold} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
                                 </div>
                               </div>
                             </div>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-6">
-                            <div>
-                               <p className="text-xs font-bold text-gray-400 uppercase">Categoría</p>
-                               <div className="flex items-center gap-2">
-                                  <p className="font-medium text-gray-900">{viewingItem.category}</p>
-                                  {isAdmin && <button onClick={() => setReassignItem(viewingItem)} className="p-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 rounded-md transition-colors" title="Reubicar Elemento"><ArrowRightLeft size={14}/></button>}
-                               </div>
-                            </div>
+                            <div><p className="text-xs font-bold text-gray-400 uppercase">Categoría</p><p className="font-medium text-gray-900">{viewingItem.category}</p></div>
                             <div><p className="text-xs font-bold text-gray-400 uppercase">Ubicación</p><p className="font-medium text-gray-900">{viewingItem.location}</p></div>
                             <div><p className="text-xs font-bold text-gray-400 uppercase">Proveedor</p><p className="font-medium text-gray-900">{viewingItem.provider || '--'}</p></div>
                             <div><p className="text-xs font-bold text-gray-400 uppercase">Marca</p><p className="font-medium text-gray-900">{viewingItem.brand || '--'}</p></div>
@@ -893,7 +998,7 @@ ${currentUserData.name}
 
                           {viewingItem.observations && (
                             <div className="mt-6 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-                              <p className="text-xs font-bold text-yellow-700 uppercase mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones</p>
+                              <p className="text-xs font-bold text-yellow-700 uppercase mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones / Seguridad</p>
                               <p className="text-sm text-yellow-900">{viewingItem.observations}</p>
                             </div>
                           )}
@@ -953,7 +1058,7 @@ ${currentUserData.name}
                         {editingItem ? 'Editar Ficha del Producto' : 'Registro de Nueva Ficha de Material'}
                       </h2>
                     </div>
-                    <button onClick={()=>{setShowItemForm(false); setImagePreview(null);}} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24} className="text-gray-400"/></button>
+                    <button onClick={()=>{setShowItemForm(false); setImagePreviews([]); setEditingItem(null);}} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24} className="text-gray-400"/></button>
                   </div>
 
                   <form onSubmit={handleSaveItem} className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
@@ -963,21 +1068,39 @@ ${currentUserData.name}
                       <input name="name" defaultValue={editingItem?.name} required className="w-full p-4 border border-gray-300 rounded-xl font-bold text-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" />
                     </div>
 
-                    {/* IMAGEN DEL PRODUCTO */}
+                    {/* IMAGEN DEL PRODUCTO (MULTIPLE) */}
                     <div className="col-span-1 md:col-span-2 bg-slate-50 p-6 rounded-2xl border border-gray-200 shadow-inner">
-                      <label className="block text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 flex items-center gap-2"><ImageIcon size={18}/> Fotografía del Producto</label>
-                      <div className="flex flex-col sm:flex-row items-center gap-6">
-                         <div className="w-32 h-32 rounded-xl bg-white border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                           {imagePreview ? <img src={imagePreview} className="w-full h-full object-cover" /> : <ImageIcon className="text-gray-300" size={40}/>}
+                      <div className="flex justify-between items-center mb-4">
+                         <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><ImageIcon size={18}/> Fotografías (Máx 4)</label>
+                         <span className="text-xs font-bold bg-white px-2 py-1 rounded border text-gray-500">{imagePreviews.length} / 4 subidas</span>
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row items-start gap-6">
+                         
+                         {/* Grid de previsualizaciones */}
+                         <div className="flex gap-2 flex-wrap">
+                           {imagePreviews.map((preview, index) => (
+                             <div key={index} className="w-24 h-24 rounded-xl bg-white border-2 border-gray-300 overflow-hidden shrink-0 shadow-sm relative group">
+                               <img src={preview} className="w-full h-full object-cover" />
+                               <button type="button" onClick={() => removeImagePreview(index)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"><X size={12}/></button>
+                             </div>
+                           ))}
+                           
+                           {imagePreviews.length < 4 && (
+                             <div className="w-24 h-24 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center shrink-0">
+                               <ImageIcon className="text-gray-300" size={30}/>
+                             </div>
+                           )}
                          </div>
-                         <div className="flex-1 flex flex-col sm:flex-row gap-3 w-full">
-                            <label className="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 rounded-xl text-center cursor-pointer transition-colors shadow-sm text-sm flex justify-center items-center gap-2">
-                              <Upload size={18}/> Subir Archivo
-                              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+
+                         <div className="flex-1 flex flex-col sm:flex-row gap-3 w-full mt-auto">
+                            <label className={`flex-1 border border-gray-300 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50 text-gray-700 cursor-pointer'}`}>
+                              <Upload size={18}/> {imagePreviews.length > 0 ? 'Añadir Más' : 'Subir Archivo'}
+                              <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imagePreviews.length >= 4} />
                             </label>
-                            <label className="flex-1 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl text-center cursor-pointer transition-colors shadow-sm text-sm flex justify-center items-center gap-2">
+                            <label className={`flex-1 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-900 text-white cursor-pointer'}`}>
                               <Camera size={18}/> Tomar Foto
-                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageUpload(e)} disabled={imagePreviews.length >= 4} />
                             </label>
                          </div>
                       </div>
@@ -1039,27 +1162,35 @@ ${currentUserData.name}
                       <textarea name="observations" defaultValue={editingItem?.observations} placeholder="Condiciones especiales, notas de almacenamiento, sensibilidad, etc." rows="3" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none"></textarea>
                     </div>
 
-                    {/* --- Stock Engine Mejorado con Cambio Automático --- */}
-                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-4 gap-6 pt-6 border-t border-gray-100">
+                    {/* --- Stock Engine Mejorado (Con Selector de Uso/Sellado y Manual Alert) --- */}
+                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-5 gap-6 pt-6 border-t border-gray-100">
+                      
+                      {/* Estado Sellado / En Uso */}
+                      <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 col-span-1 sm:col-span-2">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Estado del Contenedor</label>
+                        <div className="flex gap-2 bg-white p-1 rounded-xl border border-gray-300">
+                           <button type="button" onClick={() => setFormSealStatus('sealed')} className={`flex-1 py-2 text-xs font-black uppercase rounded-lg transition-colors ${formSealStatus === 'sealed' ? 'bg-emerald-100 text-emerald-700' : 'text-gray-400 hover:bg-gray-100'}`}>Sellado</button>
+                           <button type="button" onClick={() => setFormSealStatus('in_use')} className={`flex-1 py-2 text-xs font-black uppercase rounded-lg transition-colors ${formSealStatus === 'in_use' ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:bg-gray-100'}`}>En Uso</button>
+                        </div>
+                      </div>
+
                       <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Tipo de Stock</label>
-                        <select name="stockType" value={formStockType} onChange={(e) => setFormStockType(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl font-bold text-base text-center outline-none bg-white">
-                          <option value="unit">Unidades (Cerradas)</option>
-                          <option value="jar">Frascos (Estimado %)</option>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Tipo Físico</label>
+                        <select name="stockType" value={formStockType} onChange={(e) => setFormStockType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-xl font-bold text-sm text-center outline-none bg-white">
+                          <option value="unit">Unidades</option>
+                          <option value="jar">Frasco (%)</option>
                         </select>
                       </div>
-                      <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Cantidad {formStockType === 'jar' && '(%)'} *</label>
-                        <input type="number" name="qty" defaultValue={editingItem?.qty || 0} max={formStockType === 'jar' ? "100" : ""} required className="w-full p-3 border border-gray-300 rounded-xl font-black text-2xl text-center outline-none" />
-                      </div>
-                      <div className="bg-red-50 p-5 rounded-2xl border border-red-200">
-                        <label className="block text-xs font-bold text-red-700 uppercase mb-2 text-center flex items-center justify-center gap-1"><AlertTriangle size={14}/> Alerta Mínima {formStockType === 'jar' && '(%)'} *</label>
-                        <input type="number" name="minThreshold" defaultValue={editingItem?.minThreshold || 1} max={formStockType === 'jar' ? "100" : ""} required className="w-full p-3 border border-red-300 rounded-xl font-black text-2xl text-center text-red-700 outline-none bg-white" />
+                      <div className="bg-blue-50 p-5 rounded-2xl border border-blue-200">
+                        <label className="block text-xs font-bold text-blue-700 uppercase mb-2 text-center">Stock Actual *</label>
+                        <input type="number" name="qty" defaultValue={editingItem?.qty || 0} max={formStockType === 'jar' ? "100" : ""} required className="w-full p-2 border border-blue-300 rounded-xl font-black text-xl text-center outline-none" />
                       </div>
                       <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Unidad *</label>
-                        <input name="unit" defaultValue={formStockType === 'jar' ? '%' : (editingItem?.unit || 'uds')} readOnly={formStockType === 'jar'} required placeholder="Ej. ml" className={`w-full p-3 border border-gray-300 rounded-xl font-bold text-lg text-center outline-none ${formStockType === 'jar' ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white'}`} />
+                        <input name="unit" defaultValue={formStockType === 'jar' ? '%' : (editingItem?.unit || 'uds')} readOnly={formStockType === 'jar'} required placeholder="Ej. ml" className={`w-full p-2 border border-gray-300 rounded-xl font-bold text-lg text-center outline-none ${formStockType === 'jar' ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white'}`} />
                       </div>
+                      
+                      <input type="hidden" name="minThreshold" value={editingItem?.minThreshold || 1} />
                     </div>
                     
                     {/* Link de Compra Directo */}
@@ -1135,7 +1266,10 @@ ${currentUserData.name}
                                   <p className="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded border"><QrCode size={14} className="inline mr-1"/>{scannedItem.barcode}</p>
                                 </div>
                               </div>
-                              {scannedItem.imageUrl && <img src={scannedItem.imageUrl} className="w-24 h-24 rounded-xl object-cover border-2 border-gray-200 shadow-sm shrink-0" />}
+                              {/* Soportar Array de Imagenes */}
+                              {(scannedItem.imageUrls && scannedItem.imageUrls.length > 0) || scannedItem.imageUrl ? (
+                                <img src={scannedItem.imageUrls ? scannedItem.imageUrls[0] : scannedItem.imageUrl} className="w-24 h-24 rounded-xl object-cover border-2 border-gray-200 shadow-sm shrink-0" />
+                              ) : null}
                             </div>
 
                             <div className="bg-gray-50 rounded-2xl p-5 mb-4 text-sm border border-gray-200 grid grid-cols-2 gap-y-4 gap-x-4">
@@ -1259,8 +1393,8 @@ ${currentUserData.name}
                               <td className="p-5"><p className="font-bold text-gray-800">{new Date(log.timestamp).toLocaleDateString()}</p><p className="text-xs text-gray-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</p></td>
                               <td className="p-5"><p className="font-bold text-gray-900 flex items-center gap-2"><User size={14} className="text-blue-500"/> {log.userName}</p><p className="text-xs text-gray-400">{log.userEmail}</p></td>
                               <td className="p-5 text-center">
-                                <span className={`px-4 py-1.5 rounded-full text-[10px] uppercase font-black tracking-wider ${log.action === 'add' ? 'bg-green-100 text-green-700' : log.action === 'remove' ? 'bg-orange-100 text-orange-700' : log.action === 'create' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
-                                  {log.action === 'add' ? '+ INGRESO' : log.action === 'remove' ? '- CONSUMO' : log.action === 'create' ? 'CREACIÓN' : 'ELIMINADO'} {log.amount > 0 ? `(${log.amount})` : ''}
+                                <span className={`px-4 py-1.5 rounded-full text-[10px] uppercase font-black tracking-wider ${log.action === 'add' ? 'bg-green-100 text-green-700' : log.action === 'remove' ? 'bg-orange-100 text-orange-700' : log.action === 'create' ? 'bg-blue-100 text-blue-700' : log.action === 'update' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'}`}>
+                                  {log.action === 'add' ? '+ INGRESO' : log.action === 'remove' ? '- CONSUMO' : log.action === 'create' ? 'CREACIÓN' : log.action === 'update' ? 'ACTUALIZADO' : 'ELIMINADO'} {log.amount > 0 ? `(${log.amount})` : ''}
                                 </span>
                               </td>
                               <td className="p-5 font-bold text-gray-800">{log.itemName}</td>
