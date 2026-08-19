@@ -72,6 +72,7 @@
       'asistentelicam@gmail.com',
       'nnajerag@ipn.mx',
       'cgomezm310393@gmail.com'
+      'avalentinaregab@gmail.com'
     ];
 
     function LabInventoryApp() {
@@ -233,7 +234,7 @@
       };
       const expiringItems = getExpiringSoonItems();
 
-      // --- FUNCIONES COMPRAS ---
+     // --- FUNCIONES COMPRAS ---
       const handleOrderStatusChange = async (item, newStatus) => {
         if (!isAdmin) return alert("Solo administradores.");
         let newQty = item.qty;
@@ -252,13 +253,36 @@
       };
 
       const handleSendPurchaseRequest = (item) => {
-        const emailTo = "compras.directivo@laboratorio.com"; 
-        const subject = encodeURIComponent(`Requisición LabManager - ${item.name}`);
-        const body = encodeURIComponent(`Solicitud de compra.\nProducto: ${item.name}\nCatálogo: ${item.catalogNum||'N/A'}\nEnlace Compra: ${item.purchaseLink || 'N/A'}\nStock actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit}\nMin: ${item.minThreshold}\n\nGestión Automática LabManager.`);
+        const emailTo = "nnajerag@ipn.mx"; 
+        const subject = encodeURIComponent(`Solicitud de Compra / Reabastecimiento: ${item.name}`);
+        
+        const bodyText = `Estimada Dra. Nayelli Nájera,
+
+Por medio del presente correo, me dirijo a usted para solicitar formalmente la compra o reabastecimiento del siguiente artículo, el cual ha alcanzado un nivel crítico en el inventario del laboratorio.
+
+--- DETALLES TÉCNICOS DEL ARTÍCULO ---
+• Producto / Reactivo: ${item.name}
+• Categoría: ${item.category || 'N/A'}
+• Proveedor y Marca: ${item.provider || 'N/A'} / ${item.brand || 'N/A'}
+• Número de Catálogo: ${item.catalogNum || 'N/A'}
+• Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo de seguridad es ${item.minThreshold})
+
+--- ENLACES Y REFERENCIAS ---
+• Enlace sugerido de compra: ${item.purchaseLink || 'No especificado en sistema'}
+• Fotografía / Referencia Visual: ${item.imageUrl || 'No se subió fotografía'}
+
+Quedo a su entera disposición en caso de requerir información adicional o especificaciones para proceder con el trámite.
+
+Atentamente,
+${currentUserData.name}
+(Solicitud generada automáticamente vía LabManager Pro)`;
+
+        const body = encodeURIComponent(bodyText);
         window.location.href = `mailto:${emailTo}?subject=${subject}&body=${body}`;
         handleOrderStatusChange(item, 'ordered');
       };
 
+      // --- FUNCIONES EXPORTAR (RESPALDO Y ETIQUETAS) ---
       // --- FUNCIONES EXPORTAR (RESPALDO Y ETIQUETAS) ---
       const handleExportCSV = () => {
         if (!isAdmin) return alert("Solo administradores.");
