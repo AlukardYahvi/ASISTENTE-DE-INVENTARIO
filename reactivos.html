@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inventario General: Reactivos y Materiales (Biologia Molecular)</title>
+  <title>Inventario General: Reactivos y Materiales</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
@@ -29,7 +29,7 @@
 
     const { 
       Search, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, 
-      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Tag, Calendar, AlertCircle, AlertTriangle, FlaskConical, Package, Droplet
+      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Tag, Calendar, AlertCircle, AlertTriangle, FlaskConical, Package, PackageOpen, Droplet, Download, Upload, Camera, Mail, Bell
     } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -46,6 +46,7 @@
     const db = getFirestore(app);
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'lab-manager-yahvi';
 
+    // ¡Corregido el error de la coma que faltaba aquí!
     const SUPER_ADMIN_EMAILS = [
       'yahvi.edsel.hernandez@gmail.com',
       'asistentelicam@gmail.com',
@@ -66,9 +67,13 @@
 
       const [showForm, setShowForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
-      const [imagePreview, setImagePreview] = useState(null);
+      
+      // Soporte para múltiples fotos y estado de sellado
+      const [imagePreviews, setImagePreviews] = useState([]);
+      const [formSealStatus, setFormSealStatus] = useState('sealed');
       
       const [consumeItem, setConsumeItem] = useState(null);
+      const [showGlobalHistory, setShowGlobalHistory] = useState(false);
 
       useEffect(() => {
         const initAuth = async () => {
@@ -82,7 +87,8 @@
 
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           if (user) {
-            setCurrentUser({ uid: user.uid, email: user.email, isSuperAdmin: user.email ? SUPER_ADMIN_EMAILS.includes(user.email) : false });
+            const userName = user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario Anónimo');
+            setCurrentUser({ uid: user.uid, email: user.email, name: userName, isSuperAdmin: user.email ? SUPER_ADMIN_EMAILS.includes(user.email) : false });
           } else { 
             setCurrentUser(null);
             setLoading(false);
@@ -121,24 +127,41 @@
         return () => { unsubInv(); unsubLogs(); };
       }, [currentUser, selectedItemDetail]);
 
-      const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX = 400; let w = img.width; let h = img.height;
-            if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } } else { if (h > MAX) { w *= MAX / h; h = MAX; } }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            setImagePreview(canvas.toDataURL('image/jpeg', 0.6));
-          }
-          img.src = event.target.result;
+      useEffect(() => {
+        if (showForm && editingItem) {
+          const loadedImages = editingItem.imageUrls ? [...editingItem.imageUrls] : (editingItem.imageUrl ? [editingItem.imageUrl] : []);
+          setImagePreviews(loadedImages);
+          setFormSealStatus(editingItem.sealStatus || 'sealed');
+        } else if (!showForm) {
+          setImagePreviews([]);
+          setFormSealStatus('sealed');
         }
-        reader.readAsDataURL(file);
+      }, [showForm, editingItem]);
+
+      const handleImageUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        if (imagePreviews.length + files.length > 4) return alert("Puedes subir un máximo de 4 fotografías.");
+
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX = 600; let w = img.width; let h = img.height;
+              if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } } else { if (h > MAX) { w *= MAX / h; h = MAX; } }
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              setImagePreviews(prev => [...prev, canvas.toDataURL('image/jpeg', 0.7)].slice(0, 4));
+            }
+            img.src = event.target.result;
+          }
+          reader.readAsDataURL(file);
+        });
       };
+
+      const removeImagePreview = (index) => setImagePreviews(prev => prev.filter((_, i) => i !== index));
 
       const logAction = async (itemId, itemName, action, details, amountTaken = 0, unit = '') => {
         try {
@@ -151,6 +174,7 @@
             amountTaken,
             unit,
             userEmail: currentUser.email,
+            userName: currentUser.name,
             timestamp: new Date().toISOString()
           });
         } catch (e) { console.error("Error guardando log:", e); }
@@ -163,7 +187,10 @@
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
         data.qty = parseFloat(data.qty); 
-        data.imageUrl = imagePreview || editingItem?.imageUrl || '';
+        data.imageUrls = imagePreviews;
+        data.sealStatus = formSealStatus;
+        if(editingItem && editingItem.hasWarning !== undefined) data.hasWarning = editingItem.hasWarning;
+        else data.hasWarning = false;
 
         if (!data.barcode) {
             data.barcode = `LAB-RX-${Date.now().toString(36).toUpperCase()}`;
@@ -184,32 +211,35 @@
             data.unit
           );
 
-          setShowForm(false); setEditingItem(null); setImagePreview(null);
+          setShowForm(false); setEditingItem(null); setImagePreviews([]);
         } catch (err) { alert("Error al guardar: " + err.message); }
       };
 
+      const toggleSealStatus = async (id, currentStatus) => {
+         try {
+           const newStatus = currentStatus === 'sealed' ? 'in_use' : 'sealed';
+           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', id), { sealStatus: newStatus }, { merge: true });
+         } catch(e) { console.error(e); }
+      };
+
       const updateStockStatus = async (itemId, status) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { stockStatus: status }, { merge: true });
-        } catch (err) { console.error("Error al actualizar el estado: ", err); }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { stockStatus: status }, { merge: true }); } 
+        catch (err) { console.error("Error al actualizar el estado: ", err); }
       };
 
       const updateQuickNotes = async (itemId, notes) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { quickNotes: notes }, { merge: true });
-        } catch (err) { console.error("Error al guardar la nota: ", err); }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { quickNotes: notes }, { merge: true }); } 
+        catch (err) { console.error("Error al guardar la nota: ", err); }
       };
 
       const toggleWarningStatus = async (itemId, currentStatus) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { hasWarning: !currentStatus }, { merge: true });
-        } catch (err) { console.error("Error al actualizar la alerta: ", err); }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { hasWarning: !currentStatus }, { merge: true }); } 
+        catch (err) { console.error("Error al actualizar la alerta: ", err); }
       };
 
       const updateWarningNotes = async (itemId, notes) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { warningNotes: notes }, { merge: true });
-        } catch (err) { console.error("Error al guardar la nota de alerta: ", err); }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', itemId), { warningNotes: notes }, { merge: true }); } 
+        catch (err) { console.error("Error al guardar la nota de alerta: ", err); }
       };
 
       const handleConsumeSubmit = async (e) => {
@@ -225,16 +255,7 @@
 
         try {
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', consumeItem.id), { qty: newQty }, { merge: true });
-          
-          await logAction(
-            consumeItem.id,
-            consumeItem.name,
-            'consumido',
-            reason,
-            amountToTake,
-            consumeItem.unit
-          );
-
+          await logAction(consumeItem.id, consumeItem.name, 'consumido', reason, amountToTake, consumeItem.unit);
           setConsumeItem(null);
         } catch (err) { alert("Error al registrar el uso: " + err.message); }
       };
@@ -245,6 +266,47 @@
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos', id));
           if(view === 'detail') setView('catalog'); 
         }
+      };
+
+      const handleSendPurchaseRequest = (item) => {
+        const emailTo = "nnajerag@ipn.mx"; 
+        const subject = encodeURIComponent(`Solicitud de Compra / Reabastecimiento: ${item.name}`);
+        const bodyText = `Estimada Dra. Nayelli Nájera,
+
+Por medio del presente correo, solicito formalmente la compra o reabastecimiento del siguiente reactivo/material, el cual requiere atención en el inventario del laboratorio.
+
+--- DETALLES TÉCNICOS ---
+• Producto: ${item.name}
+• Categoría: ${item.category || 'N/A'}
+• Especificaciones: ${item.technicalDetails || 'N/A'}
+• Marca / Proveedor: ${item.brand || 'N/A'} / ${item.provider || 'N/A'}
+• Catálogo sugerido: ${item.catalogNum || 'N/A'}
+• Stock Actual en LAB: ${item.qty} ${item.unit}
+
+--- ENLACES Y REFERENCIAS ---
+• Enlace de compra: ${item.purchaseLink || 'No especificado en sistema'}
+• Referencia Visual: ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
+
+Atentamente,
+${currentUser.name || currentUser.email}
+(Vía LabManager Pro)`;
+
+        window.location.href = `mailto:${emailTo}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+      };
+
+      const handleExportCSV = () => {
+        if (!currentUser?.isSuperAdmin) return alert("Solo administradores.");
+        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Detalles_Tecnicos', 'Proveedor', 'Marca', 'Catalogo', 'Lote', 'Cantidad', 'Unidad', 'Estado_Fisico', 'Alerta_Incidencia', 'Ubicacion_Lab', 'Ubicacion_Caja', 'Caducidad', 'Enlace_Compra', 'Notas_Generales', 'Notas_Stock'];
+        const rows = reactivos.map(i => {
+          const notes = i.notes ? i.notes.replace(/"/g, '""').replace(/\n/g, ' ') : '';
+          const tech = i.technicalDetails ? i.technicalDetails.replace(/"/g, '""').replace(/\n/g, ' ') : '';
+          const quick = i.quickNotes ? i.quickNotes.replace(/"/g, '""').replace(/\n/g, ' ') : '';
+          return [ `"${i.barcode||i.id}"`, `"${i.name}"`, `"${i.category||''}"`, `"${tech}"`, `"${i.provider||''}"`, `"${i.brand||''}"`, `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, i.qty, `"${i.unit||''}"`, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.hasWarning ? 'SI' : 'NO'}"`, `"${i.locationLab||''}"`, `"${i.locationBox||''}"`, `"${i.expirationDate||''}"`, `"${i.purchaseLink||''}"`, `"${notes}"`, `"${quick}"` ];
+        });
+        const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `Reactivos_LabManager_${new Date().toLocaleDateString().replace(/\//g,'-')}.csv`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
       const handlePrintAllLabels = () => {
@@ -338,10 +400,13 @@
                   <p className="text-cyan-200 font-medium text-sm mt-1">Módulo General LabManager</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="flex flex-wrap items-center justify-center gap-3 w-full md:w-auto">
                 <a href="index.html" className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors font-bold flex items-center gap-2 backdrop-blur-sm"><ArrowLeft size={18}/> Dashboard</a>
+                {currentUser.isSuperAdmin && (
+                  <button onClick={() => setShowGlobalHistory(true)} className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors font-bold flex items-center gap-2 backdrop-blur-sm" title="Historial Global"><History size={18}/></button>
+                )}
                 {currentUser.isSuperAdmin && view === 'catalog' && (
-                  <button onClick={() => {setEditingItem(null); setImagePreview(null); setShowForm(true);}} className="flex-1 md:flex-none px-6 py-2 bg-white text-cyan-800 rounded-xl font-bold hover:bg-cyan-50 shadow-xl transition-all">
+                  <button onClick={() => {setEditingItem(null); setImagePreviews([]); setShowForm(true);}} className="flex-1 md:flex-none px-6 py-2 bg-white text-cyan-800 rounded-xl font-bold hover:bg-cyan-50 shadow-xl transition-all">
                     + Registrar Nuevo
                   </button>
                 )}
@@ -367,9 +432,10 @@
                     />
                   </div>
                   {currentUser.isSuperAdmin && (
-                    <button onClick={handlePrintAllLabels} className="px-5 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center gap-2 shadow-sm w-full md:w-auto justify-center transition-colors">
-                      <Printer size={18}/> Imprimir Catálogo
-                    </button>
+                    <div className="flex gap-2 w-full md:w-auto">
+                      <button onClick={handlePrintAllLabels} className="flex-1 md:flex-none px-4 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center justify-center gap-2 shadow-sm transition-colors" title="Imprimir Etiquetas"><Printer size={18}/></button>
+                      <button onClick={handleExportCSV} className="flex-1 md:flex-none px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-bold flex items-center justify-center gap-2 shadow-sm transition-colors" title="Descargar Excel"><Download size={18}/></button>
+                    </div>
                   )}
                 </div>
 
@@ -382,28 +448,38 @@
                       <p className="text-gray-400 mt-2">Intenta con otros términos de búsqueda o registra un reactivo nuevo.</p>
                     </div>
                   ) : (
-                    filteredItems.map(item => (
-                      <div key={item.id} onClick={() => openDetailView(item)} className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 hover:border-cyan-400 transition-all duration-300 flex flex-col overflow-hidden group relative cursor-pointer">
+                    filteredItems.map(item => {
+                      const displayImg = item.imageUrls?.[0] || item.imageUrl;
+                      return (
+                      <div key={item.id} onClick={() => openDetailView(item)} className={`bg-white rounded-3xl border-2 ${item.hasWarning ? 'border-red-300 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border-transparent shadow-sm'} hover:shadow-xl hover:-translate-y-1 hover:border-cyan-400 transition-all duration-300 flex flex-col overflow-hidden group relative cursor-pointer`}>
                         
-                        {/* Indicador de semáforo en catálogo */}
-                        <div className="absolute top-3 left-3 z-20 flex gap-2">
-                          {item.stockStatus === 'red' && <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white" title="Nivel crítico"></div>}
-                          {item.stockStatus === 'yellow' && <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-sm border border-white" title="Nivel bajo"></div>}
-                          {item.stockStatus === 'green' && <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white" title="Nivel óptimo"></div>}
+                        <div className="absolute top-3 left-3 flex gap-1 z-20">
+                          {item.sealStatus === 'in_use' ? (
+                             <span className="bg-amber-100/90 text-amber-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-amber-200 flex items-center gap-1"><PackageOpen size={10}/> En Uso</span>
+                          ) : (
+                             <span className="bg-emerald-100/90 text-emerald-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-emerald-200 flex items-center gap-1"><Package size={10}/> Sellado</span>
+                          )}
                         </div>
 
                         {/* Indicador de Alerta de Contaminación/Incidencia */}
                         {item.hasWarning && (
                           <div className="absolute top-3 right-3 z-20 animate-pulse">
                              <div className="bg-red-500 text-white px-2 py-1 rounded-md text-[10px] font-black uppercase flex items-center gap-1 shadow-md border border-red-600" title="Incidencia Reportada">
-                               <AlertTriangle size={12} /> Alerta
+                               <Bell size={12} /> Alerta
                              </div>
                           </div>
                         )}
 
+                        {/* Indicador de semáforo en catálogo */}
+                        <div className="absolute top-10 left-3 z-20 flex gap-2">
+                          {item.stockStatus === 'red' && <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white" title="Nivel crítico"></div>}
+                          {item.stockStatus === 'yellow' && <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-sm border border-white" title="Nivel bajo"></div>}
+                          {item.stockStatus === 'green' && <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white" title="Nivel óptimo"></div>}
+                        </div>
+
                         <div className="h-36 bg-cyan-50 flex items-center justify-center relative overflow-hidden border-b border-cyan-100 p-4">
-                          {item.imageUrl ? (
-                            <img src={item.imageUrl} alt={item.name} className="h-full object-contain mix-blend-multiply drop-shadow-sm group-hover:scale-105 transition-transform duration-500" />
+                          {displayImg ? (
+                            <img src={displayImg} alt={item.name} className="h-full object-contain mix-blend-multiply drop-shadow-sm group-hover:scale-105 transition-transform duration-500" />
                           ) : (
                             <div className="text-cyan-200 group-hover:text-cyan-300 transition-colors">
                               <FlaskConical size={56} />
@@ -446,7 +522,7 @@
                           </div>
                         </div>
                       </div>
-                    ))
+                    )})
                   )}
                 </div>
               </div>
@@ -459,15 +535,32 @@
                   <ArrowLeft size={18}/> Volver al Catálogo
                 </button>
 
-                <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col lg:flex-row">
+                <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col lg:flex-row relative">
+                  
+                  {selectedItemDetail.hasWarning && (
+                    <div className="absolute top-0 left-0 w-full bg-red-500 text-white p-2 text-center text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 z-10 animate-pulse">
+                      <AlertTriangle size={14}/> ¡Atención! Se ha reportado una alerta / incidencia para este elemento
+                    </div>
+                  )}
+
                   {/* Lado Izquierdo: Imagen e Info Básica */}
-                  <div className="lg:w-1/3 bg-slate-50 border-r border-slate-100 p-8 flex flex-col items-center">
-                    <div className="bg-white w-full aspect-square rounded-2xl shadow-inner border-2 border-dashed border-slate-200 flex items-center justify-center p-4 mb-6 relative group overflow-hidden">
-                      {selectedItemDetail.imageUrl ? (
-                        <img src={selectedItemDetail.imageUrl} alt={selectedItemDetail.name} className="max-w-full max-h-full object-contain" />
-                      ) : (
-                        <Package size={80} className="text-slate-300"/>
-                      )}
+                  <div className={`lg:w-1/3 bg-slate-50 border-r border-slate-100 p-8 flex flex-col items-center ${selectedItemDetail.hasWarning ? 'pt-12' : ''}`}>
+                    
+                    <div className="w-full flex flex-col gap-2 mb-6">
+                       <div className="bg-white w-full aspect-square rounded-2xl shadow-inner border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                         {(selectedItemDetail.imageUrls && selectedItemDetail.imageUrls.length > 0) || selectedItemDetail.imageUrl ? (
+                           <img src={selectedItemDetail.imageUrls ? selectedItemDetail.imageUrls[0] : selectedItemDetail.imageUrl} className="w-full h-full object-contain p-2"/> 
+                         ) : <Package size={64} className="text-slate-300"/>}
+                       </div>
+                       {selectedItemDetail.imageUrls && selectedItemDetail.imageUrls.length > 1 && (
+                          <div className="grid grid-cols-3 gap-2">
+                             {selectedItemDetail.imageUrls.slice(1).map((imgUrl, i) => (
+                               <div key={i} className="aspect-square bg-white rounded-lg overflow-hidden border border-slate-200 p-1 flex items-center justify-center cursor-pointer hover:border-cyan-400 transition-colors" onClick={() => window.open(imgUrl, '_blank')}>
+                                  <img src={imgUrl} className="max-w-full max-h-full object-contain"/>
+                               </div>
+                             ))}
+                          </div>
+                       )}
                     </div>
                     
                     <div className="w-full text-center mb-6">
@@ -475,7 +568,7 @@
                       <h2 className="text-3xl font-black text-slate-800 leading-tight">{selectedItemDetail.name}</h2>
                     </div>
 
-                    <div className="w-full bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                    <div className="w-full bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 mb-6">
                       <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Tag size={14}/> ID Catálogo</span>
                         <span className="font-mono text-sm text-slate-700 font-bold">{selectedItemDetail.catalogNum || '--'}</span>
@@ -491,10 +584,31 @@
                         </span>
                       </div>
                     </div>
+
+                    {currentUser?.isSuperAdmin && (
+                      <div className="w-full flex flex-col gap-2 shrink-0 mt-auto">
+                        <button 
+                          onClick={() => toggleSealStatus(selectedItemDetail.id, selectedItemDetail.sealStatus)}
+                          className={`w-full py-3 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${selectedItemDetail.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200'}`}
+                        >
+                          {selectedItemDetail.sealStatus === 'in_use' ? <PackageOpen size={16}/> : <Package size={16}/>}
+                          {selectedItemDetail.sealStatus === 'in_use' ? 'Marcar Sellado' : 'Marcar en Uso'}
+                        </button>
+                        
+                        <button 
+                          onClick={() => toggleWarningStatus(selectedItemDetail.id, selectedItemDetail.hasWarning)}
+                          className={`w-full py-3 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${selectedItemDetail.hasWarning ? 'bg-red-600 text-white hover:bg-red-700 border-red-700 shadow-md' : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}
+                        >
+                          <Bell size={16} className={selectedItemDetail.hasWarning ? 'animate-pulse' : ''}/>
+                          {selectedItemDetail.hasWarning ? 'Desactivar Alerta' : 'Activar Alerta de Incidencia'}
+                        </button>
+                      </div>
+                    )}
+
                   </div>
 
                   {/* Lado Derecho: Detalles Completos */}
-                  <div className="lg:w-2/3 p-8 flex flex-col">
+                  <div className={`lg:w-2/3 p-8 flex flex-col ${selectedItemDetail.hasWarning ? 'pt-12' : ''}`}>
                     
                     <div className="flex flex-wrap justify-between items-start gap-4 mb-6 border-b border-slate-100 pb-6">
                       <div>
@@ -510,7 +624,7 @@
                           </button>
                           {currentUser.isSuperAdmin && (
                             <>
-                              <button onClick={() => {setEditingItem(selectedItemDetail); setImagePreview(selectedItemDetail.imageUrl); setShowForm(true);}} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2">
+                              <button onClick={() => {setEditingItem(selectedItemDetail); setImagePreviews(selectedItemDetail.imageUrls ? [...selectedItemDetail.imageUrls] : (selectedItemDetail.imageUrl ? [selectedItemDetail.imageUrl] : [])); setShowForm(true);}} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2">
                                 <Settings size={18}/> Editar
                               </button>
                               <button onClick={() => handleDelete(selectedItemDetail.id, selectedItemDetail.name)} className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 hover:text-red-600 transition-colors shadow-sm">
@@ -522,7 +636,7 @@
                       )}
                     </div>
 
-                    {/* Especificaciones Técnicas (Reemplazo de Secuencia/Hospedero) */}
+                    {/* Especificaciones Técnicas */}
                     {selectedItemDetail.technicalDetails && (
                       <div className="mb-6">
                          <p className="text-xs font-bold text-cyan-700 uppercase tracking-wider mb-2 flex items-center gap-1"><Droplet size={16}/> Características / Especificaciones Técnicas</p>
@@ -577,35 +691,21 @@
                     </div>
 
                     {/* ALERTA DE INCIDENCIA / CONTAMINACIÓN */}
-                    <div className={`p-5 rounded-2xl border shadow-sm flex flex-col mb-8 transition-colors duration-300 ${selectedItemDetail.hasWarning ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className={`text-sm font-bold flex items-center gap-2 ${selectedItemDetail.hasWarning ? 'text-red-700' : 'text-slate-700'}`}>
-                          <AlertTriangle size={18} className={selectedItemDetail.hasWarning ? 'text-red-500' : 'text-slate-400'} /> 
-                          Reportar Incidencia / Problema (Ej. Contaminación)
-                        </h4>
-                        <button 
-                          onClick={() => toggleWarningStatus(selectedItemDetail.id, selectedItemDetail.hasWarning)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${selectedItemDetail.hasWarning ? 'bg-red-600 text-white shadow-md hover:bg-red-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-                        >
-                          {selectedItemDetail.hasWarning ? 'Desactivar Alerta' : 'Activar Alerta'}
-                        </button>
-                      </div>
-                      
-                      {selectedItemDetail.hasWarning ? (
-                        <div className="animate-fade-in mt-3 flex flex-col">
+                    {selectedItemDetail.hasWarning && (
+                       <div className="p-5 rounded-2xl border bg-red-50 border-red-200 shadow-sm flex flex-col mb-8 animate-fade-in">
+                          <h4 className="text-sm font-bold text-red-700 mb-3 flex items-center gap-2">
+                            <AlertTriangle size={18} className="text-red-500" /> Reporte de Incidencia
+                          </h4>
                           <textarea 
                             defaultValue={selectedItemDetail.warningNotes || ''} 
                             onBlur={(e) => updateWarningNotes(selectedItemDetail.id, e.target.value)}
-                            placeholder="Describe el problema (ej. Sospecha de contaminación fúngica, solución precipitada, lote defectuoso...)" 
+                            placeholder="Describe el problema (ej. Sospecha de contaminación, solución precipitada, lote defectuoso...)" 
                             className="w-full flex-1 p-3 bg-white border border-red-200 rounded-xl focus:border-red-500 focus:ring-2 ring-red-100 outline-none resize-none text-sm text-red-900 placeholder-red-300"
                             rows="3"
                           ></textarea>
                           <p className="text-right text-[10px] text-red-400 mt-1 font-medium">El reporte se guarda al salir del cuadro</p>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-400 mt-1">Activa esta alerta para advertir a los demás de que no usen este reactivo hasta revisión.</p>
-                      )}
-                    </div>
+                       </div>
+                    )}
 
                     {selectedItemDetail.notes && (
                       <div className="mb-8">
@@ -616,11 +716,18 @@
                       </div>
                     )}
 
-                    {selectedItemDetail.purchaseLink && (
-                      <a href={selectedItemDetail.purchaseLink} target="_blank" className="w-full sm:w-auto self-start px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 mb-8">
-                        <ExternalLink size={18}/> Enlace de Producto / Compra
-                      </a>
-                    )}
+                    <div className="flex flex-wrap gap-3 mb-8">
+                      {selectedItemDetail.purchaseLink && (
+                        <a href={selectedItemDetail.purchaseLink} target="_blank" className="flex-1 min-w-[200px] justify-center px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 text-sm">
+                          <ExternalLink size={18}/> Ver Producto Original
+                        </a>
+                      )}
+                      {currentUser?.isSuperAdmin && (
+                        <button onClick={() => handleSendPurchaseRequest(selectedItemDetail)} className="flex-1 min-w-[200px] justify-center px-6 py-3 bg-cyan-600 text-white font-bold rounded-xl hover:bg-cyan-700 transition-colors shadow-md flex items-center gap-2 text-sm">
+                          <Mail size={18}/> Solicitar Compra (Dra. Nájera)
+                        </button>
+                      )}
+                    </div>
 
                     <div className="mt-auto pt-6 border-t border-slate-100">
                       <h4 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><History size={20} className="text-cyan-600"/> Historial de Uso</h4>
@@ -643,7 +750,7 @@
                                 <p className="text-sm font-medium text-slate-700">{log.details}</p>
                               </div>
                               <div className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded border shadow-sm flex items-center gap-1 w-fit">
-                                <User size={12}/> {log.userEmail.split('@')[0]}
+                                <User size={12}/> {log.userName || log.userEmail.split('@')[0]}
                               </div>
                             </div>
                           ))}
@@ -657,7 +764,6 @@
             )}
 
             {/* --- MODAL DE CREACIÓN/EDICIÓN --- */}
-            {}
             {showForm && currentUser.isSuperAdmin && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-fade-in relative border border-cyan-100">
@@ -665,56 +771,72 @@
                     <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
                       <FlaskConical className="text-cyan-600"/> {editingItem ? 'Editar Registro' : 'Registrar Nuevo Elemento'}
                     </h2>
-                    <button onClick={() => {setShowForm(false); setImagePreview(null); setEditingItem(null);}} className="p-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
+                    <button onClick={() => {setShowForm(false); setImagePreviews([]); setEditingItem(null);}} className="p-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
                   </div>
                   
                   <form onSubmit={handleSave} className="p-6 space-y-6">
-                    <div className="flex flex-col md:flex-row gap-6">
-                      {/* Foto */}
-                      <div className="w-full md:w-1/3 space-y-2">
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Foto del Envase/Producto</label>
-                        <div className="h-56 w-full bg-slate-50 border-2 border-dashed border-cyan-200 rounded-2xl flex items-center justify-center overflow-hidden relative hover:bg-cyan-50 transition-colors group">
-                          {imagePreview || (editingItem && editingItem.imageUrl) ? <img src={imagePreview || editingItem.imageUrl} className="object-cover w-full h-full" /> : 
-                            <div className="text-center text-cyan-400 group-hover:text-cyan-600 transition-colors">
-                              <ImageIcon className="mx-auto mb-2" size={40}/>
-                              <span className="text-sm font-medium">Click para subir</span>
-                            </div>
-                          }
-                          <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                        </div>
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-cyan-100 shadow-inner">
+                      <div className="flex justify-between items-center mb-4">
+                         <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><ImageIcon size={18}/> Fotografías (Máx 4)</label>
+                         <span className="text-xs font-bold bg-white px-2 py-1 rounded border text-gray-500">{imagePreviews.length} / 4 fotos</span>
                       </div>
                       
-                      {/* Datos Libres */}
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div className="sm:col-span-2">
-                          <label className="block text-xs font-bold text-blue-600 uppercase mb-1 tracking-wider">Nombre del Reactivo/Material *</label>
-                          <input name="name" placeholder="ej. Agua DEPC, SYBR Green, Puntas 10ul..." defaultValue={editingItem?.name} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white focus:ring-2 ring-cyan-100 outline-none transition-all font-bold text-lg text-gray-800" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Categoría / Tipo *</label>
-                          <input name="category" placeholder="ej. Solución, Material, Reactivo PCR..." defaultValue={editingItem?.category} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none transition-all" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Marca / Proveedor *</label>
-                          <input name="brand" placeholder="ej. Invitrogen, Eppendorf..." defaultValue={editingItem?.brand} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none transition-all" />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Detalles / Especificaciones Técnicas</label>
-                          <input name="technicalDetails" placeholder="ej. 10X, 500mM, Libre de RNasas, Para PCR Tiempo Real..." defaultValue={editingItem?.technicalDetails} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none transition-all" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Catálogo</label>
-                          <input name="catalogNum" defaultValue={editingItem?.catalogNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Lote</label>
-                          <input name="lotNum" defaultValue={editingItem?.lotNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none font-mono" />
-                        </div>
+                      <div className="flex flex-col sm:flex-row items-start gap-6">
+                         <div className="flex gap-2 flex-wrap">
+                           {imagePreviews.map((preview, index) => (
+                             <div key={index} className="w-24 h-24 rounded-xl bg-white border-2 border-cyan-200 overflow-hidden shrink-0 shadow-sm relative group">
+                               <img src={preview} className="w-full h-full object-cover" />
+                               <button type="button" onClick={() => removeImagePreview(index)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"><X size={12}/></button>
+                             </div>
+                           ))}
+                           {imagePreviews.length < 4 && (
+                             <div className="w-24 h-24 rounded-xl bg-white border-2 border-dashed border-cyan-200 flex items-center justify-center shrink-0">
+                               <ImageIcon className="text-cyan-200" size={30}/>
+                             </div>
+                           )}
+                         </div>
+
+                         <div className="flex-1 flex flex-col sm:flex-row gap-3 w-full mt-auto">
+                            <label className={`flex-1 border border-cyan-200 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-cyan-50 text-cyan-700 cursor-pointer'}`}>
+                              <Upload size={18}/> Subir Archivo
+                              <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imagePreviews.length >= 4} />
+                            </label>
+                            <label className={`flex-1 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-cyan-700 hover:bg-cyan-800 text-white cursor-pointer'}`}>
+                              <Camera size={18}/> Cámara
+                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} disabled={imagePreviews.length >= 4} />
+                            </label>
+                         </div>
+                      </div>
+                    </div>
+                      
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-cyan-600 uppercase mb-1 tracking-wider">Nombre del Reactivo/Material *</label>
+                        <input name="name" placeholder="ej. Agua DEPC, SYBR Green, Puntas 10ul..." defaultValue={editingItem?.name} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white focus:ring-2 ring-cyan-100 outline-none transition-all font-bold text-lg text-gray-800" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Categoría / Tipo *</label>
+                        <input name="category" placeholder="ej. Solución, Material, Reactivo PCR..." defaultValue={editingItem?.category} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Marca / Proveedor *</label>
+                        <input name="brand" placeholder="ej. Invitrogen, Eppendorf..." defaultValue={editingItem?.brand} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none transition-all" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Detalles / Especificaciones Técnicas</label>
+                        <input name="technicalDetails" placeholder="ej. 10X, 500mM, Libre de RNasas, Para PCR Tiempo Real..." defaultValue={editingItem?.technicalDetails} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Catálogo</label>
+                        <input name="catalogNum" defaultValue={editingItem?.catalogNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Lote</label>
+                        <input name="lotNum" defaultValue={editingItem?.lotNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-cyan-500 focus:bg-white outline-none font-mono" />
                       </div>
                     </div>
 
                     <div className="border-t border-slate-100 pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Ubicación */}
                       <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
                         <h3 className="font-bold text-slate-700 flex items-center gap-2"><MapPin size={18} className="text-cyan-500"/> Ubicación Física</h3>
                         <div>
@@ -727,12 +849,11 @@
                         </div>
                       </div>
 
-                      {/* Cantidad y Fechas */}
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-xs font-bold text-blue-600 uppercase mb-1 tracking-wider">Cantidad Disponible *</label>
-                            <input type="number" step="0.01" min="0" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-blue-700 focus:border-blue-500 outline-none bg-blue-50" />
+                            <label className="block text-xs font-bold text-cyan-600 uppercase mb-1 tracking-wider">Cantidad Disponible *</label>
+                            <input type="number" step="0.01" min="0" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-cyan-700 focus:border-cyan-500 outline-none bg-cyan-50" />
                           </div>
                           <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Unidad *</label>
@@ -755,6 +876,11 @@
                        <textarea name="notes" defaultValue={editingItem?.notes} rows="2" placeholder="Ej. Sensible a la luz, guardar en oscuridad. Alícuotas en refri 4." className="w-full p-3 border border-slate-200 rounded-xl focus:border-cyan-500 outline-none resize-none"></textarea>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-4 mt-6">
+                        <button type="button" onClick={() => setFormSealStatus('sealed')} className={`py-3 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${formSealStatus === 'sealed' ? 'bg-cyan-100 text-cyan-700 border-cyan-300' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}><Package size={16}/> Nuevo / Sellado</button>
+                        <button type="button" onClick={() => setFormSealStatus('in_use')} className={`py-3 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${formSealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}><PackageOpen size={16}/> En Uso / Abierto</button>
+                    </div>
+
                     <div className="bg-slate-50 p-4 -mx-6 -mb-6 mt-6 rounded-b-3xl border-t">
                       <button type="submit" className="w-full py-4 bg-cyan-700 text-white font-black text-lg rounded-xl hover:bg-cyan-800 shadow-lg hover:shadow-cyan-500/30 transition-all">Guardar Elemento en Inventario</button>
                     </div>
@@ -764,36 +890,73 @@
             )}
 
             {/* --- MODAL DE CONSUMO --- */}
-            {}
             {consumeItem && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-fade-in overflow-hidden border border-blue-100">
-                    <div className="bg-blue-700 p-6 text-white text-center">
+               <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-fade-in overflow-hidden border border-cyan-100">
+                    <div className="bg-cyan-700 p-6 text-white text-center">
                       <Activity className="mx-auto mb-2 opacity-80" size={40}/>
-                      <h2 className="text-2xl font-black">Registrar Consumo</h2>
-                      <p className="text-blue-100 font-medium">{consumeItem.name}</p>
+                      <h2 className="text-2xl font-black">Registrar Uso</h2>
+                      <p className="text-cyan-100 font-medium">{consumeItem.name}</p>
                     </div>
                     <form onSubmit={handleConsumeSubmit} className="p-6 space-y-5">
                       <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center flex justify-between items-center">
                         <span className="text-sm font-bold text-gray-500 uppercase">Stock Físico Actual:</span>
-                        <span className="text-2xl font-black text-blue-700">{consumeItem.qty} <span className="text-sm">{consumeItem.unit}</span></span>
+                        <span className="text-2xl font-black text-cyan-700">{consumeItem.qty} <span className="text-sm">{consumeItem.unit}</span></span>
                       </div>
                       
                       <div>
                         <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Cantidad a Descontar ({consumeItem.unit}) *</label>
-                        <input type="number" step="0.01" min="0.01" name="amount" required max={consumeItem.qty} className="w-full p-4 border border-slate-200 rounded-xl text-center text-xl font-bold focus:border-blue-500 focus:ring-2 ring-blue-200 outline-none" placeholder="0.0" />
+                        <input type="number" step="0.01" min="0.01" name="amount" required max={consumeItem.qty} className="w-full p-4 border border-slate-200 rounded-xl text-center text-xl font-bold focus:border-cyan-500 focus:ring-2 ring-cyan-200 outline-none" placeholder="0.0" />
                       </div>
                       
                       <div>
                          <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Proyecto, Persona o Motivo *</label>
-                         <textarea name="reason" required rows="2" className="w-full p-3 border border-slate-200 rounded-xl focus:border-blue-500 outline-none resize-none" placeholder="Ej. Preparación de geles, Tomado para Cuarto de Cultivo..."></textarea>
+                         <textarea name="reason" required rows="2" className="w-full p-3 border border-slate-200 rounded-xl focus:border-cyan-500 outline-none resize-none" placeholder="Ej. Preparación de geles, Tomado para Cuarto de Cultivo..."></textarea>
                       </div>
 
                       <div className="flex gap-3 pt-4">
                         <button type="button" onClick={() => setConsumeItem(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
-                        <button type="submit" className="flex-1 py-3 bg-blue-700 text-white font-bold rounded-xl hover:bg-blue-800 shadow-md shadow-blue-500/20 transition-all">Confirmar Descuento</button>
+                        <button type="submit" className="flex-1 py-3 bg-cyan-700 text-white font-bold rounded-xl hover:bg-cyan-800 shadow-md shadow-cyan-500/20 transition-all">Confirmar Descuento</button>
                       </div>
                     </form>
+                  </div>
+               </div>
+            )}
+
+            {/* --- MODAL DE HISTORIAL GLOBAL --- */}
+            {showGlobalHistory && currentUser.isSuperAdmin && (
+               <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[80vh] flex flex-col animate-fade-in overflow-hidden border border-slate-200">
+                    <div className="bg-slate-800 p-6 text-white flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                         <History className="text-cyan-400" size={28}/>
+                         <div><h2 className="text-2xl font-black">Auditoría Global de Reactivos</h2><p className="text-slate-300 text-sm">Registro de todos los movimientos y creaciones.</p></div>
+                      </div>
+                      <button onClick={() => setShowGlobalHistory(false)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-full transition-colors"><X size={20}/></button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                      <table className="w-full text-left bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <thead className="bg-slate-100 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                          <tr><th className="p-4">Fecha/Hora</th><th className="p-4">Usuario</th><th className="p-4">Acción</th><th className="p-4">Elemento</th><th className="p-4">Detalles</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-sm">
+                          {logs.map(log => (
+                            <tr key={log.id} className="hover:bg-slate-50">
+                               <td className="p-4"><p className="font-bold text-slate-700">{new Date(log.timestamp).toLocaleDateString()}</p><p className="text-xs text-slate-400">{new Date(log.timestamp).toLocaleTimeString()}</p></td>
+                               <td className="p-4 font-medium text-slate-600">{log.userName || log.userEmail.split('@')[0]}</td>
+                               <td className="p-4">
+                                 <span className={`px-2 py-1 rounded text-[10px] uppercase font-black ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {log.action} {log.amountTaken > 0 ? `-${log.amountTaken}` : ''}
+                                 </span>
+                               </td>
+                               <td className="p-4 font-bold text-cyan-700">{log.itemName}</td>
+                               <td className="p-4 text-slate-600 italic">{log.details}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                </div>
             )}
@@ -808,3 +971,4 @@
   </script>
 </body>
 </html>
+```eof
