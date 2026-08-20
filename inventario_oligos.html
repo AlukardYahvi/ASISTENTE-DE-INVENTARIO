@@ -30,7 +30,8 @@
 
     const { 
       Search, Settings, Trash2, ArrowLeft, Image: ImageIcon, ExternalLink, ShieldAlert, 
-      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Dna, Tag, Calendar, AlertCircle, AlertTriangle
+      Layers, X, Printer, History, MapPin, MinusCircle, FileText, Activity, Clock, User, Pencil, Dna, Tag, Calendar, AlertCircle, AlertTriangle,
+      Download, Package, PackageOpen, Upload, Camera, Mail
     } = LucideIcons;
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
@@ -51,7 +52,8 @@
       'yahvi.edsel.hernandez@gmail.com',
       'asistentelicam@gmail.com',
       'nnajerag@ipn.mx',
-      'cgomezm310393@gmail.com'
+      'cgomezm310393@gmail.com',
+      'avalentinaregab@gmail.com'
     ];
 
     function OligosApp() {
@@ -61,13 +63,13 @@
       const [searchQuery, setSearchQuery] = useState('');
       const [loading, setLoading] = useState(true);
 
-      // Estados de Vistas
-      const [view, setView] = useState('catalog'); // 'catalog' o 'detail'
-      const [selectedItemDetail, setSelectedItemDetail] = useState(null); // Item a mostrar en detalle
+      const [view, setView] = useState('catalog'); 
+      const [selectedItemDetail, setSelectedItemDetail] = useState(null); 
 
       const [showForm, setShowForm] = useState(false);
       const [editingItem, setEditingItem] = useState(null);
-      const [imagePreview, setImagePreview] = useState(null);
+      const [imagePreviews, setImagePreviews] = useState([]);
+      const [formSealStatus, setFormSealStatus] = useState('sealed');
       
       const [consumeItem, setConsumeItem] = useState(null);
 
@@ -83,7 +85,9 @@
 
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
           if (user) {
-            setCurrentUser({ uid: user.uid, email: user.email, isSuperAdmin: user.email ? SUPER_ADMIN_EMAILS.includes(user.email) : false });
+            const userEmail = user.email || '';
+            const userName = user.displayName || (userEmail ? userEmail.split('@')[0] : 'Usuario Anónimo');
+            setCurrentUser({ uid: user.uid, email: userEmail, name: userName, isSuperAdmin: userEmail ? SUPER_ADMIN_EMAILS.includes(userEmail) : false });
           } else { 
             setCurrentUser(null);
             setLoading(false);
@@ -101,13 +105,11 @@
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setOligos(data);
             
-            // Si hay un item seleccionado, actualizarlo para reflejar cambios (ej. consumir o actualizar semáforo)
             if (selectedItemDetail) {
                const updatedItem = data.find(i => i.id === selectedItemDetail.id);
                if (updatedItem) setSelectedItemDetail(updatedItem);
-               else setView('catalog'); // Si se eliminó, regresar
+               else setView('catalog'); 
             }
-
             setLoading(false);
           },
           (error) => { console.error("Error al escuchar cambios: ", error); setLoading(false); }
@@ -124,24 +126,41 @@
         return () => { unsubInv(); unsubLogs(); };
       }, [currentUser, selectedItemDetail]);
 
-      const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX = 400; let w = img.width; let h = img.height;
-            if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } } else { if (h > MAX) { w *= MAX / h; h = MAX; } }
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            setImagePreview(canvas.toDataURL('image/jpeg', 0.6));
-          }
-          img.src = event.target.result;
+      useEffect(() => {
+        if (showForm && editingItem) {
+          const loadedImages = editingItem.imageUrls ? [...editingItem.imageUrls] : (editingItem.imageUrl ? [editingItem.imageUrl] : []);
+          setImagePreviews(loadedImages);
+          setFormSealStatus(editingItem.sealStatus || 'sealed');
+        } else if (!showForm) {
+          setImagePreviews([]);
+          setFormSealStatus('sealed');
         }
-        reader.readAsDataURL(file);
+      }, [showForm, editingItem]);
+
+      const handleImageUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        if (imagePreviews.length + files.length > 4) return alert("Puedes subir un máximo de 4 fotografías.");
+
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX = 600; let w = img.width; let h = img.height;
+              if (w > h) { if (w > MAX) { h *= MAX / w; w = MAX; } } else { if (h > MAX) { w *= MAX / h; h = MAX; } }
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              setImagePreviews(prev => [...prev, canvas.toDataURL('image/jpeg', 0.7)].slice(0, 4));
+            }
+            img.src = event.target.result;
+          }
+          reader.readAsDataURL(file);
+        });
       };
+
+      const removeImagePreview = (index) => setImagePreviews(prev => prev.filter((_, i) => i !== index));
 
       const logAction = async (itemId, itemName, action, details, amountTaken = 0) => {
         try {
@@ -154,6 +173,7 @@
             amountTaken,
             unit: 'viales',
             userEmail: currentUser.email,
+            userName: currentUser.name || currentUser.email.split('@')[0],
             timestamp: new Date().toISOString()
           });
         } catch (e) {
@@ -168,12 +188,11 @@
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
         data.qty = parseInt(data.qty, 10); 
-        data.imageUrl = imagePreview || editingItem?.imageUrl || '';
+        data.imageUrls = imagePreviews;
+        data.sealStatus = formSealStatus;
         data.sequence = data.sequence.toUpperCase().replace(/\s/g, ''); 
 
-        if (!data.barcode) {
-            data.barcode = `LAB-OL-${Date.now().toString(36).toUpperCase()}`;
-        }
+        if (!data.barcode) data.barcode = `LAB-OL-${Date.now().toString(36).toUpperCase()}`;
 
         const isNew = !editingItem;
         const docId = editingItem ? editingItem.id : `oligo_${Date.now()}`;
@@ -188,40 +207,35 @@
             isNew ? 'Registro inicial en el sistema' : 'Actualización de datos del oligo'
           );
 
-          setShowForm(false); setEditingItem(null); setImagePreview(null);
+          setShowForm(false); setEditingItem(null); setImagePreviews([]);
         } catch (err) { alert("Error al guardar: " + err.message); }
       };
 
+      const toggleSealStatus = async (id, currentStatus) => {
+         try {
+           const newStatus = currentStatus === 'sealed' ? 'in_use' : 'sealed';
+           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', id), { sealStatus: newStatus }, { merge: true });
+         } catch(e) { console.error(e); }
+      };
+
       const updateStockStatus = async (itemId, status) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { stockStatus: status }, { merge: true });
-        } catch (err) {
-          console.error("Error al actualizar el estado: ", err);
-        }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { stockStatus: status }, { merge: true }); } 
+        catch (err) { console.error(err); }
       };
 
       const updateQuickNotes = async (itemId, notes) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { quickNotes: notes }, { merge: true });
-        } catch (err) {
-          console.error("Error al guardar la nota: ", err);
-        }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { quickNotes: notes }, { merge: true }); } 
+        catch (err) { console.error(err); }
       };
 
       const toggleWarningStatus = async (itemId, currentStatus) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { hasWarning: !currentStatus }, { merge: true });
-        } catch (err) {
-          console.error("Error al actualizar la alerta: ", err);
-        }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { hasWarning: !currentStatus }, { merge: true }); } 
+        catch (err) { console.error(err); }
       };
 
       const updateWarningNotes = async (itemId, notes) => {
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { warningNotes: notes }, { merge: true });
-        } catch (err) {
-          console.error("Error al guardar la nota de alerta: ", err);
-        }
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', itemId), { warningNotes: notes }, { merge: true }); } 
+        catch (err) { console.error(err); }
       };
 
       const handleConsumeSubmit = async (e) => {
@@ -237,15 +251,7 @@
 
         try {
           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', consumeItem.id), { qty: newQty }, { merge: true });
-          
-          await logAction(
-            consumeItem.id,
-            consumeItem.name,
-            'consumido',
-            reason,
-            amountToTake
-          );
-
+          await logAction(consumeItem.id, consumeItem.name, 'consumido', reason, amountToTake);
           setConsumeItem(null);
         } catch (err) { alert("Error al registrar el uso: " + err.message); }
       };
@@ -254,8 +260,46 @@
         if (!currentUser?.isSuperAdmin) return;
         if (window.confirm(`¿Seguro que deseas eliminar el oligo "${name}" permanentemente?`)) {
           await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inv_oligos', id));
-          if(view === 'detail') setView('catalog'); // Salir del detalle si se borra
+          if(view === 'detail') setView('catalog'); 
         }
+      };
+
+      const handleSendPurchaseRequest = (item) => {
+        const emailTo = "nnajerag@ipn.mx"; 
+        const subject = encodeURIComponent(`Solicitud de Síntesis / Compra: Oligo ${item.name}`);
+        const bodyText = `Estimada Dra. Nayelli Nájera,
+
+Por medio del presente correo, solicito formalmente la compra o reabastecimiento del siguiente oligonucleótido, el cual requiere atención en el inventario.
+
+--- DETALLES TÉCNICOS ---
+• Nombre: ${item.name}
+• Secuencia: ${item.sequence}
+• Especie: ${item.species || 'N/A'}
+• Sintetizador sugerido: ${item.brand || 'N/A'}
+• Stock Actual: ${item.qty} viales
+
+--- ENLACES Y REFERENCIAS ---
+• Enlace de compra/síntesis: ${item.purchaseLink || 'No especificado en sistema'}
+• Referencia Visual (si aplica): ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
+
+Atentamente,
+${currentUser.name || currentUser.email}
+(Vía LabManager Pro)`;
+
+        window.location.href = `mailto:${emailTo}?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+      };
+
+      const handleExportCSV = () => {
+        if (!currentUser?.isSuperAdmin) return alert("Solo administradores.");
+        const headers = ['ID/Codigo', 'Nombre', 'Secuencia', 'Especie', 'Marca_Sintetizador', 'Catalogo', 'Lote', 'Viales', 'Unidad_Masa', 'Ubicacion', 'Estado_Fisico', 'Caducidad', 'Alerta_Inespecificidad', 'Enlace_Compra', 'Notas'];
+        const rows = oligos.map(i => {
+          const notes = i.notes ? i.notes.replace(/"/g, '""').replace(/\n/g, ' ') : '';
+          return [ `"${i.barcode||i.id}"`, `"${i.name}"`, `"${i.sequence}"`, `"${i.species||''}"`, `"${i.brand||''}"`, `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, i.qty, `"${i.unit||''}"`, `"${i.locationLab||''} - ${i.locationBox||''}"`, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.expirationDate||''}"`, `"${i.hasWarning ? 'SI' : 'NO'}"`, `"${i.purchaseLink||''}"`, `"${notes}"` ];
+        });
+        const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `Oligos_LabManager_${new Date().toLocaleDateString().replace(/\//g,'-')}.csv`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
       const handlePrintAllLabels = () => {
@@ -352,7 +396,7 @@
               <div className="flex items-center gap-3 w-full md:w-auto">
                 <a href="index.html" className="px-4 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors font-bold flex items-center gap-2 backdrop-blur-sm"><ArrowLeft size={18}/> Dashboard</a>
                 {currentUser.isSuperAdmin && view === 'catalog' && (
-                  <button onClick={() => {setEditingItem(null); setImagePreview(null); setShowForm(true);}} className="flex-1 md:flex-none px-6 py-2 bg-white text-emerald-700 rounded-xl font-bold hover:bg-emerald-50 shadow-xl transition-all">
+                  <button onClick={() => {setEditingItem(null); setImagePreviews([]); setShowForm(true);}} className="flex-1 md:flex-none px-6 py-2 bg-white text-emerald-700 rounded-xl font-bold hover:bg-emerald-50 shadow-xl transition-all">
                     + Registrar Nuevo
                   </button>
                 )}
@@ -362,7 +406,6 @@
 
           <div className="max-w-7xl mx-auto px-4 md:px-8 -mt-16">
             
-            {}
             {/* --- VISTA 1: CATÁLOGO --- */}
             {view === 'catalog' && (
               <div className="animate-fade-in">
@@ -379,9 +422,10 @@
                     />
                   </div>
                   {currentUser.isSuperAdmin && (
-                    <button onClick={handlePrintAllLabels} className="px-5 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center gap-2 shadow-sm w-full md:w-auto justify-center transition-colors">
-                      <Printer size={18}/> Imprimir Catálogo
-                    </button>
+                    <div className="flex gap-2 w-full md:w-auto">
+                       <button onClick={handlePrintAllLabels} className="flex-1 md:flex-none px-4 py-3 bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-bold flex items-center justify-center gap-2 shadow-sm transition-colors" title="Imprimir Etiquetas"><Printer size={18}/></button>
+                       <button onClick={handleExportCSV} className="flex-1 md:flex-none px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-bold flex items-center justify-center gap-2 shadow-sm transition-colors" title="Descargar Excel"><Download size={18}/></button>
+                    </div>
                   )}
                 </div>
 
@@ -394,11 +438,21 @@
                       <p className="text-gray-400">Intenta con otros términos de búsqueda o registra uno nuevo.</p>
                     </div>
                   ) : (
-                    filteredOligos.map(oligo => (
+                    filteredOligos.map(oligo => {
+                      const displayImg = oligo.imageUrls?.[0] || oligo.imageUrl;
+                      return (
                       <div key={oligo.id} onClick={() => openDetailView(oligo)} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:border-emerald-300 transition-all duration-300 overflow-hidden flex flex-col group relative cursor-pointer">
                         
+                        <div className="absolute top-3 left-3 z-20 flex gap-1">
+                          {oligo.sealStatus === 'in_use' ? (
+                             <span className="bg-amber-100/90 text-amber-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-amber-200 flex items-center gap-1"><PackageOpen size={10}/> En Uso</span>
+                          ) : (
+                             <span className="bg-emerald-100/90 text-emerald-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-emerald-200 flex items-center gap-1"><Package size={10}/> Sellado</span>
+                          )}
+                        </div>
+
                         {/* Indicador sutil de semáforo en catálogo */}
-                        <div className="absolute top-3 left-3 z-20">
+                        <div className="absolute top-10 left-3 z-20 flex gap-1">
                           {oligo.stockStatus === 'red' && <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white" title="Nivel crítico"></div>}
                           {oligo.stockStatus === 'yellow' && <div className="w-3 h-3 rounded-full bg-yellow-500 shadow-sm border border-white" title="Nivel bajo"></div>}
                           {oligo.stockStatus === 'green' && <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white" title="Nivel óptimo"></div>}
@@ -415,8 +469,8 @@
 
                         {/* Header de la Tarjeta (Imagen o Icono) */}
                         <div className="h-28 bg-emerald-50 flex items-center justify-center relative overflow-hidden border-b border-emerald-100">
-                          {oligo.imageUrl ? (
-                            <img src={oligo.imageUrl} alt={oligo.name} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
+                          {displayImg ? (
+                            <img src={displayImg} alt={oligo.name} className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
                           ) : (
                             <div className="text-emerald-200">
                               <Layers size={48} />
@@ -473,8 +527,9 @@
                           </div>
                         </div>
                       </div>
-                    ))
-                  )}
+                    );
+                  })
+                )}
                 </div>
               </div>
             )}
@@ -489,20 +544,29 @@
                 <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col lg:flex-row">
                   {/* Lado Izquierdo: Imagen e Info Básica */}
                   <div className="lg:w-1/3 bg-slate-50 border-r border-slate-100 p-8 flex flex-col items-center">
-                    <div className="bg-white w-full aspect-square rounded-2xl shadow-inner border-2 border-dashed border-slate-200 flex items-center justify-center p-4 mb-6 relative overflow-hidden">
-                      {selectedItemDetail.imageUrl ? (
-                        <img src={selectedItemDetail.imageUrl} alt={selectedItemDetail.name} className="w-full h-full object-contain" />
-                      ) : (
-                        <ImageIcon size={64} className="text-slate-300"/>
-                      )}
+                    <div className="w-full flex flex-col gap-2 mb-6">
+                       <div className="bg-white w-full aspect-square rounded-2xl shadow-inner border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                         {(selectedItemDetail.imageUrls && selectedItemDetail.imageUrls.length > 0) || selectedItemDetail.imageUrl ? (
+                           <img src={selectedItemDetail.imageUrls ? selectedItemDetail.imageUrls[0] : selectedItemDetail.imageUrl} className="w-full h-full object-contain p-2"/> 
+                         ) : <ImageIcon size={64} className="text-slate-300"/>}
+                       </div>
+                       {selectedItemDetail.imageUrls && selectedItemDetail.imageUrls.length > 1 && (
+                          <div className="grid grid-cols-3 gap-2">
+                             {selectedItemDetail.imageUrls.slice(1).map((imgUrl, i) => (
+                               <div key={i} className="aspect-square bg-white rounded-lg overflow-hidden border border-slate-200 p-1 flex items-center justify-center cursor-pointer hover:border-emerald-400 transition-colors" onClick={() => window.open(imgUrl, '_blank')}>
+                                  <img src={imgUrl} className="max-w-full max-h-full object-contain"/>
+                               </div>
+                             ))}
+                          </div>
+                       )}
                     </div>
                     
                     <div className="w-full text-center mb-6">
                       <p className="text-emerald-500 font-bold uppercase tracking-widest text-xs mb-1">Nombre del Oligo</p>
-                      <h2 className="text-3xl font-black text-slate-800 leading-tight">{selectedItemDetail.name}</h2>
+                      <h2 className="text-3xl font-black text-slate-800 leading-tight break-words">{selectedItemDetail.name}</h2>
                     </div>
 
-                    <div className="w-full bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                    <div className="w-full bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4 mb-6">
                       <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                         <span className="text-xs font-bold text-slate-400 flex items-center gap-1"><Tag size={14}/> Especie</span>
                         <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">{selectedItemDetail.species || '--'}</span>
@@ -518,6 +582,18 @@
                         </span>
                       </div>
                     </div>
+
+                    {isAdmin && (
+                      <div className="w-full flex flex-col gap-2 shrink-0 mt-auto">
+                        <button 
+                          onClick={() => toggleSealStatus(selectedItemDetail.id, selectedItemDetail.sealStatus)}
+                          className={`w-full py-3 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${selectedItemDetail.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200'}`}
+                        >
+                          {selectedItemDetail.sealStatus === 'in_use' ? <PackageOpen size={16}/> : <Package size={16}/>}
+                          {selectedItemDetail.sealStatus === 'in_use' ? 'Marcar Sellado' : 'Marcar en Uso'}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Lado Derecho: Detalles Completos y Acciones */}
@@ -537,7 +613,7 @@
                           </button>
                           {currentUser.isSuperAdmin && (
                             <>
-                              <button onClick={() => {setEditingItem(selectedItemDetail); setImagePreview(selectedItemDetail.imageUrl); setShowForm(true);}} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2">
+                              <button onClick={() => {setEditingItem(selectedItemDetail); setImagePreviews(selectedItemDetail.imageUrls ? [...selectedItemDetail.imageUrls] : (selectedItemDetail.imageUrl ? [selectedItemDetail.imageUrl] : [])); setShowForm(true);}} className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2">
                                 <Settings size={18}/> Editar
                               </button>
                               <button onClick={() => handleDelete(selectedItemDetail.id, selectedItemDetail.name)} className="p-2 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 hover:text-red-600 transition-colors shadow-sm">
@@ -558,23 +634,30 @@
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                       {/* Ubicación */}
-                      <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
+                      <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100">
                         <p className="text-xs uppercase font-bold tracking-widest text-indigo-400 mb-2 flex items-center gap-2"><MapPin size={16}/> Localización Exacta</p>
-                        <p className="font-medium text-indigo-900 text-base mb-1">{selectedItemDetail.locationLab || 'No definido'}</p>
-                        <p className="font-black text-indigo-700 text-lg">{selectedItemDetail.locationBox || '--'}</p>
+                        <p className="font-medium text-indigo-900 text-lg mb-1">{selectedItemDetail.locationLab || 'No definido'}</p>
+                        <p className="font-black text-indigo-700 text-xl">{selectedItemDetail.locationBox || '--'}</p>
                       </div>
 
-                      {/* Stock */}
-                      <div className="bg-teal-50 p-5 rounded-2xl border border-teal-100 flex flex-col justify-center">
-                        <p className="text-xs uppercase font-bold tracking-widest text-teal-500 mb-2 flex items-center gap-2"><Activity size={16}/> Inventario / Alícuotas</p>
-                        <div className="flex items-baseline gap-2">
-                          <p className="text-4xl font-black text-teal-700">{selectedItemDetail.qty}</p>
-                          <p className="text-lg font-bold text-teal-600">{selectedItemDetail.unit}</p>
+                      {/* Stock (Viales y Masa separados) */}
+                      <div className="flex flex-col gap-3">
+                        <div className="bg-teal-50 p-4 rounded-2xl border border-teal-100 flex justify-between items-center h-full">
+                          <div>
+                            <p className="text-xs uppercase font-bold tracking-widest text-teal-600 mb-1 flex items-center gap-2"><Activity size={16}/> Viales Físicos</p>
+                            <p className="text-4xl font-black text-teal-800">{selectedItemDetail.qty} <span className="text-lg font-bold text-teal-600">tubos</span></p>
+                          </div>
+                        </div>
+                        <div className="bg-cyan-50 p-4 rounded-2xl border border-cyan-100 flex justify-between items-center h-full">
+                          <div>
+                            <p className="text-xs uppercase font-bold tracking-widest text-cyan-600 mb-1 flex items-center gap-2"><Dna size={16}/> Concentración / Masa</p>
+                            <p className="text-2xl font-black text-cyan-800">{selectedItemDetail.unit}</p>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* NUEVO: SEMÁFORO Y NOTAS RÁPIDAS DE ESTADO DEL VIAL */}
+                    {/* SEMÁFORO Y NOTAS RÁPIDAS DE ESTADO DEL VIAL */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                       {/* Semáforo de Estado */}
                       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
@@ -616,7 +699,7 @@
                       </div>
                     </div>
 
-                    {/* NUEVO: ALERTA DE CONTROL DE CALIDAD / BLAST */}
+                    {/* ALERTA DE CONTROL DE CALIDAD / BLAST */}
                     <div className={`p-5 rounded-2xl border shadow-sm flex flex-col mb-8 transition-colors duration-300 ${selectedItemDetail.hasWarning ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
                       <div className="flex justify-between items-center mb-2">
                         <h4 className={`text-sm font-bold flex items-center gap-2 ${selectedItemDetail.hasWarning ? 'text-red-700' : 'text-slate-700'}`}>
@@ -657,12 +740,19 @@
                       </div>
                     )}
 
-                    {/* Enlace de Compra */}
-                    {selectedItemDetail.purchaseLink && (
-                      <a href={selectedItemDetail.purchaseLink} target="_blank" className="w-full sm:w-auto self-start px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 mb-8">
-                        <ExternalLink size={18}/> Ver Producto en el Sintetizador (Proveedor)
-                      </a>
-                    )}
+                    {/* Enlaces */}
+                    <div className="flex flex-wrap gap-3 mb-8">
+                      {selectedItemDetail.purchaseLink && (
+                        <a href={selectedItemDetail.purchaseLink} target="_blank" className="flex-1 min-w-[200px] justify-center px-6 py-3 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 transition-colors shadow-md flex items-center gap-2 text-sm">
+                          <ExternalLink size={18}/> Ver Producto Original
+                        </a>
+                      )}
+                      {currentUser?.isSuperAdmin && (
+                        <button onClick={() => handleSendPurchaseRequest(selectedItemDetail)} className="flex-1 min-w-[200px] justify-center px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-md flex items-center gap-2 text-sm">
+                          <Mail size={18}/> Solicitar Síntesis (Dra. Nájera)
+                        </button>
+                      )}
+                    </div>
 
                     {/* Historial Integrado en la Vista */}
                     <div className="mt-auto pt-6 border-t border-slate-100">
@@ -679,14 +769,14 @@
                               <div>
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${log.action === 'consumido' ? 'bg-orange-100 text-orange-700' : log.action === 'creado' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
-                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} ${log.unit || 'viales'}`}
+                                    {log.action} {log.action === 'consumido' && `- ${log.amountTaken} viales`}
                                   </span>
                                   <span className="text-xs text-slate-400 flex items-center gap-1"><Clock size={12}/> {formatDate(log.timestamp)}</span>
                                 </div>
                                 <p className="text-sm font-medium text-slate-700">{log.details}</p>
                               </div>
                               <div className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded border shadow-sm flex items-center gap-1 w-fit">
-                                <User size={12}/> {log.userEmail.split('@')[0]}
+                                <User size={12}/> {log.userName || (log.userEmail ? log.userEmail.split('@')[0] : '')}
                               </div>
                             </div>
                           ))}
@@ -707,51 +797,68 @@
                     <h2 className="text-xl font-black text-gray-800 flex items-center gap-2">
                       <Layers className="text-emerald-600"/> {editingItem ? 'Editar Oligo' : 'Registrar Nuevo Oligo'}
                     </h2>
-                    <button onClick={() => {setShowForm(false); setImagePreview(null); setEditingItem(null);}} className="p-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
+                    <button onClick={() => {setShowForm(false); setImagePreviews([]); setEditingItem(null);}} className="p-2 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full transition-colors"><X size={20}/></button>
                   </div>
                   
                   <form onSubmit={handleSave} className="p-6 space-y-6">
-                    <div className="flex flex-col md:flex-row gap-6">
-                      {/* Imagen / Gel */}
-                      <div className="w-full md:w-1/3 space-y-2">
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Foto / Comprobación</label>
-                        <div className="h-56 w-full bg-slate-50 border-2 border-dashed border-emerald-200 rounded-2xl flex items-center justify-center overflow-hidden relative hover:bg-emerald-50 transition-colors group">
-                          {imagePreview || (editingItem && editingItem.imageUrl) ? <img src={imagePreview || editingItem.imageUrl} className="object-cover w-full h-full" /> : 
-                            <div className="text-center text-emerald-300 group-hover:text-emerald-500 transition-colors">
-                              <ImageIcon className="mx-auto mb-2" size={40}/>
-                              <span className="text-sm font-medium">Click para subir</span>
-                            </div>
-                          }
-                          <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                        </div>
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-emerald-100 shadow-inner">
+                      <div className="flex justify-between items-center mb-4">
+                         <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><ImageIcon size={18}/> Comprobaciones Visuales / Geles (Máx 4)</label>
+                         <span className="text-xs font-bold bg-white px-2 py-1 rounded border text-gray-500">{imagePreviews.length} / 4 fotos</span>
                       </div>
                       
-                      {/* Datos Principales (Grid) */}
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        <div className="sm:col-span-2">
-                          <label className="block text-xs font-bold text-emerald-600 uppercase mb-1 tracking-wider">Nombre del Oligo *</label>
-                          <input name="name" placeholder="ej. GAPDH-Fwd, p53-Rev..." defaultValue={editingItem?.name} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white focus:ring-2 ring-emerald-200 outline-none transition-all font-bold text-lg text-gray-800" />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="block text-xs font-bold text-emerald-600 uppercase mb-1 tracking-wider">Secuencia *</label>
-                          <input name="sequence" placeholder="ATGC..." defaultValue={editingItem?.sequence} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white focus:ring-2 ring-emerald-200 outline-none transition-all font-mono tracking-wider text-sm text-gray-700 uppercase" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Especie *</label>
-                          <input name="species" placeholder="ej. Human, Mouse, General..." defaultValue={editingItem?.species} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition-all" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Marca / Sintetizador *</label>
-                          <input name="brand" placeholder="ej. Sigma, IDT, Thermo..." defaultValue={editingItem?.brand} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition-all" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Catálogo</label>
-                          <input name="catalogNum" defaultValue={editingItem?.catalogNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none font-mono" />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Lote</label>
-                          <input name="lotNum" defaultValue={editingItem?.lotNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none font-mono" />
-                        </div>
+                      <div className="flex flex-col sm:flex-row items-start gap-6">
+                         <div className="flex gap-2 flex-wrap">
+                           {imagePreviews.map((preview, index) => (
+                             <div key={index} className="w-24 h-24 rounded-xl bg-white border-2 border-emerald-200 overflow-hidden shrink-0 shadow-sm relative group">
+                               <img src={preview} className="w-full h-full object-cover" />
+                               <button type="button" onClick={() => removeImagePreview(index)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"><X size={12}/></button>
+                             </div>
+                           ))}
+                           {imagePreviews.length < 4 && (
+                             <div className="w-24 h-24 rounded-xl bg-white border-2 border-dashed border-emerald-200 flex items-center justify-center shrink-0">
+                               <ImageIcon className="text-emerald-200" size={30}/>
+                             </div>
+                           )}
+                         </div>
+
+                         <div className="flex-1 flex flex-col sm:flex-row gap-3 w-full mt-auto">
+                            <label className={`flex-1 border border-emerald-200 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-emerald-50 text-emerald-700 cursor-pointer'}`}>
+                              <Upload size={18}/> Subir Archivo
+                              <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imagePreviews.length >= 4} />
+                            </label>
+                            <label className={`flex-1 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer'}`}>
+                              <Camera size={18}/> Cámara
+                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} disabled={imagePreviews.length >= 4} />
+                            </label>
+                         </div>
+                      </div>
+                    </div>
+                      
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-emerald-600 uppercase mb-1 tracking-wider">Nombre del Oligo *</label>
+                        <input name="name" placeholder="ej. GAPDH-Fwd, p53-Rev..." defaultValue={editingItem?.name} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white focus:ring-2 ring-emerald-200 outline-none transition-all font-bold text-lg text-gray-800" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-emerald-600 uppercase mb-1 tracking-wider">Secuencia *</label>
+                        <input name="sequence" placeholder="ATGC..." defaultValue={editingItem?.sequence} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white focus:ring-2 ring-emerald-200 outline-none transition-all font-mono tracking-wider text-sm text-gray-700 uppercase" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Especie *</label>
+                        <input name="species" placeholder="ej. Human, Mouse, General..." defaultValue={editingItem?.species} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Marca / Sintetizador *</label>
+                        <input name="brand" placeholder="ej. Sigma, IDT, Thermo..." defaultValue={editingItem?.brand} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Catálogo</label>
+                        <input name="catalogNum" defaultValue={editingItem?.catalogNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Nº de Lote</label>
+                        <input name="lotNum" defaultValue={editingItem?.lotNum} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:bg-white outline-none font-mono" />
                       </div>
                     </div>
 
@@ -777,8 +884,8 @@
                             <input type="number" step="1" min="0" name="qty" defaultValue={editingItem?.qty || 1} required className="w-full p-3 border border-slate-200 rounded-xl text-center font-bold text-teal-700 focus:border-teal-500 outline-none bg-teal-50" />
                           </div>
                           <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Unidad (Vol/Masa) *</label>
-                            <input name="unit" placeholder="ej. nmoles" defaultValue={editingItem?.unit || 'nmoles'} required className="w-full p-3 border border-slate-200 rounded-xl text-center outline-none" />
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider">Concentración/Masa *</label>
+                            <input name="unit" placeholder="ej. 100 µM" defaultValue={editingItem?.unit || '100 µM'} required className="w-full p-3 border border-slate-200 rounded-xl text-center outline-none" />
                           </div>
                         </div>
                         <div>
@@ -796,6 +903,11 @@
                     <div className="border-t border-slate-100 pt-6">
                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1 tracking-wider"><FileText size={14} className="inline mr-1"/>Notas / Observaciones de Uso</label>
                        <textarea name="notes" defaultValue={editingItem?.notes} rows="2" placeholder="Ej. Resuspendido en agua libre de nucleasas. Tm = 60°C." className="w-full p-3 border border-slate-200 rounded-xl focus:border-emerald-500 outline-none resize-none"></textarea>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mt-6">
+                        <button type="button" onClick={() => setFormSealStatus('sealed')} className={`py-3 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${formSealStatus === 'sealed' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}><Package size={16}/> Vial Nuevo / Sellado</button>
+                        <button type="button" onClick={() => setFormSealStatus('in_use')} className={`py-3 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${formSealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}><PackageOpen size={16}/> En Uso / Abierto</button>
                     </div>
 
                     <div className="bg-slate-50 p-4 -mx-6 -mb-6 mt-6 rounded-b-3xl border-t">
