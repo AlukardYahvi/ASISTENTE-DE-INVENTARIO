@@ -583,7 +583,7 @@ ${currentUser.name || currentUser.email}
                       </div>
                     </div>
 
-                    {isAdmin && (
+                    {currentUser?.isSuperAdmin && (
                       <div className="w-full flex flex-col gap-2 shrink-0 mt-auto">
                         <button 
                           onClick={() => toggleSealStatus(selectedItemDetail.id, selectedItemDetail.sealStatus)}
