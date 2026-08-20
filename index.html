@@ -39,7 +39,7 @@
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
       Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2,
-      Dna, TestTubes, FlaskConical, ArrowRightLeft, Package, PackageOpen, Bell, BellRing, Trash
+      Dna, TestTubes, FlaskConical, ArrowRightLeft, Package, PackageOpen, Bell, BellRing
     } = LucideIcons;
 
     const MIS_CREDENCIALES_FIREBASE = {
@@ -72,7 +72,7 @@
       'asistentelicam@gmail.com',
       'nnajerag@ipn.mx',
       'cgomezm310393@gmail.com',
-      'avalentinavegab@gmail.com'
+      'avalentinaregab@gmail.com'
     ];
 
     function LabInventoryApp() {
@@ -110,7 +110,6 @@
       const scannerInputRef = useRef(null);
       const hiddenSubmitBtnRef = useRef(null);
 
-      // --- INICIALIZACIÓN FIREBASE ---
       useEffect(() => {
         const initAuth = async () => {
           try {
@@ -144,7 +143,6 @@
         const unsubInv = onSnapshot(inventoryRef, (snapshot) => {
           const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setInventory(data);
-          
           if(viewingItem) {
              const updated = data.find(i => i.id === viewingItem.id);
              if(updated) setViewingItem(updated);
@@ -197,7 +195,6 @@
         return () => { if (formScanner) formScanner.clear().catch(()=>{}); };
       }, [cameraActiveForm, showItemForm]);
 
-      // --- MANEJO DE IMÁGENES (MULTIPLE) Y FORMULARIO ---
       useEffect(() => {
         if (showItemForm && editingItem) {
           const loadedImages = editingItem.imageUrls ? [...editingItem.imageUrls] : (editingItem.imageUrl ? [editingItem.imageUrl] : []);
@@ -244,9 +241,7 @@
          setImagePreviews(prev => prev.filter((_, idx) => idx !== indexToRemove));
       };
 
-      // --- DERIVADOS (AHORA BASADOS EN ALERTA MANUAL) ---
       const isAdmin = currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin';
-      
       const alertedItems = inventory.filter(item => item.manualAlert === true);
       
       const getExpiringSoonItems = () => {
@@ -283,18 +278,18 @@
         
         const bodyText = `Estimada Dra. Nayelli Nájera,
 
-Por medio del presente correo, me dirijo a usted para solicitar formalmente la compra o reabastecimiento del siguiente artículo, el cual ha sido reportado con alerta de stock o caducidad en el inventario del laboratorio.
+Por medio del presente correo, me dirijo a usted para solicitar formalmente la compra o reabastecimiento del siguiente artículo, el cual ha alcanzado un nivel crítico o requiere atención en el inventario del laboratorio.
 
 --- DETALLES TÉCNICOS DEL ARTÍCULO ---
 • Producto / Reactivo: ${item.name}
 • Categoría: ${item.category || 'N/A'}
 • Proveedor y Marca: ${item.provider || 'N/A'} / ${item.brand || 'N/A'}
 • Número de Catálogo: ${item.catalogNum || 'N/A'}
-• Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo sugerido es ${item.minThreshold})
+• Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo de seguridad es ${item.minThreshold})
 
 --- ENLACES Y REFERENCIAS ---
 • Enlace sugerido de compra: ${item.purchaseLink || 'No especificado en sistema'}
-• Referencia Visual (Foto): ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
+• Referencia Visual: ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
 
 Quedo a su entera disposición en caso de requerir información adicional o especificaciones para proceder con el trámite.
 
@@ -327,21 +322,33 @@ ${currentUserData.name}
          } catch(e) { console.error(e); }
       };
 
-      // --- FUNCIONES EXPORTAR (RESPALDO Y ETIQUETAS) ---
+      // DESCARGA DE EXCEL DETALLADA
       const handleExportCSV = () => {
-        if (!isAdmin) return alert("Solo administradores.");
-        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Cantidad', 'Estado', 'Tipo_Stock', 'Unidad', 'Alerta_Manual', 'Ubicacion', 'Caducidad'];
-        const rows = inventory.map(i => [
-          `"${i.barcode||i.id}"`, `"${i.name}"`, `"${i.category}"`, 
-          `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, `"${i.provider||''}"`, `"${i.brand||''}"`, 
-          i.qty, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.stockType||'unit'}"`, `"${i.unit}"`, `"${i.manualAlert ? 'SI' : 'NO'}"`, `"${i.location}"`, `"${i.expirationDate||''}"`
-        ]);
+        if (currentUserData.role !== 'superadmin') return alert("Solo los superadministradores pueden descargar la base de datos completa.");
+        
+        // Headers independientes para Excel
+        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Cantidad', 'Estado_Fisico', 'Tipo_Stock', 'Unidad', 'Alerta_Manual', 'Ubicacion', 'Caducidad', 'Observaciones', 'Enlace_Compra'];
+        
+        const rows = inventory.map(i => {
+          // Limpieza exhaustiva para que Excel no se rompa con comillas o saltos de línea
+          const obs = i.observations ? i.observations.replace(/"/g, '""').replace(/\n/g, ' ') : '';
+          const name = i.name ? i.name.replace(/"/g, '""') : '';
+          
+          return [
+            `"${i.barcode||i.id}"`, `"${name}"`, `"${i.category||''}"`, 
+            `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, `"${i.provider||''}"`, `"${i.brand||''}"`, 
+            i.qty, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.stockType||'unit'}"`, `"${i.unit||''}"`, `"${i.manualAlert ? 'SI' : 'NO'}"`, `"${i.location||''}"`, `"${i.expirationDate||''}"`, `"${obs}"`, `"${i.purchaseLink||''}"`
+          ];
+        });
+        
+        // El \uFEFF asegura que Excel respete los acentos (UTF-8)
         const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `Respaldo_LabManager_${new Date().toLocaleDateString().replace(/\//g,'-')}.csv`;
+        const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `Inventario_Global_LabManager_${new Date().toLocaleDateString().replace(/\//g,'-')}.csv`;
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
       };
 
+      // IMPRESIÓN DE ETIQUETAS
       const handlePrintAllLabels = () => {
         const printWindow = window.open('', '_blank');
         const itemsToPrint = selectedFolder ? inventory.filter(i => i.category === selectedFolder) : inventory;
@@ -391,7 +398,36 @@ ${currentUserData.name}
         printWindow.document.close();
       };
 
-      // --- FUNCIONES LOGIN ---
+      const handlePrintLabel = (itemData, fallback = null) => {
+        const code = itemData?.barcode || fallback; const name = itemData?.name || 'LabManager';
+        if (!code) return alert("Genera o escanea un código primero.");
+        const printWindow = window.open('', '_blank');
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(code)}`;
+        const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(code)}&scaleX=2&scaleY=1&includetext=true`;
+
+        printWindow.document.write(`
+          <html><head><title>Imprimir</title><style>
+            body{margin:0;display:flex;justify-content:center;align-items:center;padding-top:20px;font-family:sans-serif;} 
+            .label{width:6.5cm;height:4.5cm;border:1px dashed #000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0.2cm;box-sizing:border-box;} 
+            .title{font-size:11px;font-weight:bold;text-align:center;overflow:hidden;white-space:nowrap;max-width:100%;margin-bottom:6px;} 
+            .codes { display: flex; gap: 10px; align-items: center; justify-content: center; width: 100%;}
+            .qr{width:1.8cm;height:1.8cm;} 
+            .barcode{height:1.2cm; max-width: 3.5cm; object-fit: contain;}
+            @media print{@page{margin:0;} body{padding:0;} .label{border:none;}}
+          </style></head><body>
+            <div class="label">
+              <div class="title">${name}</div>
+              <div class="codes">
+                <img src="${qrUrl}" alt="QR"/>
+                <img src="${barcodeUrl}" alt="Barcode"/>
+              </div>
+            </div>
+            <script>setTimeout(() => { window.print(); window.close(); }, 1500);<\/script>
+          </body></html>
+        `);
+        printWindow.document.close();
+      };
+
       const handleGoogleLogin = async () => {
         const hostname = window.location.hostname || '';
         if (hostname.includes('googleusercontent.com') || hostname.includes('csb.app') || window.self !== window.top) return setAuthErrorDomain(true);
@@ -421,36 +457,6 @@ ${currentUserData.name}
           if (!inventory.some(i => i.barcode === code)) isUnique = true;
         }
         setGeneratedQR(code); return code;
-      };
-      
-      const handlePrintLabel = (itemData, fallback = null) => {
-        const code = itemData?.barcode || fallback; const name = itemData?.name || 'LabManager';
-        if (!code) return alert("Genera o escanea un código primero.");
-        const printWindow = window.open('', '_blank');
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(code)}`;
-        const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(code)}&scaleX=2&scaleY=1&includetext=true`;
-
-        printWindow.document.write(`
-          <html><head><title>Imprimir</title><style>
-            body{margin:0;display:flex;justify-content:center;align-items:center;padding-top:20px;font-family:sans-serif;} 
-            .label{width:6.5cm;height:4.5cm;border:1px dashed #000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0.2cm;box-sizing:border-box;} 
-            .title{font-size:11px;font-weight:bold;text-align:center;overflow:hidden;white-space:nowrap;max-width:100%;margin-bottom:6px;} 
-            .codes { display: flex; gap: 10px; align-items: center; justify-content: center; width: 100%;}
-            .qr{width:1.8cm;height:1.8cm;} 
-            .barcode{height:1.2cm; max-width: 3.5cm; object-fit: contain;}
-            @media print{@page{margin:0;} body{padding:0;} .label{border:none;}}
-          </style></head><body>
-            <div class="label">
-              <div class="title">${name}</div>
-              <div class="codes">
-                <img src="${qrUrl}" alt="QR"/>
-                <img src="${barcodeUrl}" alt="Barcode"/>
-              </div>
-            </div>
-            <script>setTimeout(() => { window.print(); window.close(); }, 1500);<\/script>
-          </body></html>
-        `);
-        printWindow.document.close();
       };
 
       const handleSaveItem = async (e) => {
@@ -522,7 +528,6 @@ ${currentUserData.name}
         } catch (err) { alert("Error al reubicar: " + err.message); }
       };
 
-      // --- ESCANER ---
       const handleBarcodeSubmit = (e) => {
         if(e) e.preventDefault(); if (!scanInput.trim()) return;
         const searchVal = scanInput.trim().toLowerCase();
@@ -558,7 +563,6 @@ ${currentUserData.name}
         } catch (e) { alert("Error."); }
       };
 
-      // --- RENDERIZADO LOGIN ---
       if (!currentUserData) {
         return (
           <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex items-center justify-center p-4">
@@ -613,7 +617,7 @@ ${currentUserData.name}
                 <Dna size={20} /> Inv. Oligos
               </a>
               <a href="reactivos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <FlaskConical size={20} /> Inv. Reactivos y Mat.
+                <FlaskConical size={20} /> Reactivos / Materiales
               </a>
               <a href="inventario_de_muestras_y_biobanco.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
                 <LayoutGrid size={20} /> Cajas y Muestras
@@ -622,7 +626,10 @@ ${currentUserData.name}
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
               <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white border border-slate-600' : 'hover:bg-slate-800'}`}><ClipboardSignature size={20} /> Historial Operativo</button>
               {currentUserData?.role === 'superadmin' && (
-                <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-1 transition-all ${activeTab === 'users' ? 'bg-purple-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} /> Control Accesos</button>
+                <>
+                  <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-1 transition-all ${activeTab === 'users' ? 'bg-purple-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} /> Control Accesos</button>
+                  <button onClick={handleExportCSV} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-1 transition-all hover:bg-emerald-600 hover:text-white text-emerald-400 font-bold"><Download size={20} /> Exportar Excel Completo</button>
+                </>
               )}
             </nav>
 
@@ -654,7 +661,6 @@ ${currentUserData.name}
 
             <div className="flex-1 overflow-y-auto p-4 md:p-8 relative">
               
-              {/* --- DASHBOARD --- */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
                   <div>
@@ -666,7 +672,6 @@ ${currentUserData.name}
                       <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Boxes size={32}/></div>
                       <div><p className="text-sm text-gray-500 font-bold uppercase">Elementos</p><p className="text-4xl font-black text-gray-800">{inventory.length}</p></div>
                     </div>
-                    {/* Alertas Manuales reemplazan "Bajo Stock" Automático */}
                     <div onClick={() => setActiveTab('orders')} className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md">
                       <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><BellRing size={32} className="animate-pulse" /></div>
                       <div><p className="text-sm text-gray-500 font-bold uppercase">Alertas Manuales</p><p className="text-4xl font-black text-red-600">{alertedItems.length}</p></div>
@@ -679,7 +684,6 @@ ${currentUserData.name}
                 </div>
               )}
 
-              {/* --- MÓDULO COMPRAS (Ahora basado en alertas manuales) --- */}
               {activeTab === 'orders' && (
                 <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
                   <div className="flex items-center gap-3 mb-6">
@@ -741,26 +745,26 @@ ${currentUserData.name}
                 </div>
               )}
 
-              {/* --- MÓDULO INVENTARIO Y CATALOGO --- */}
               {activeTab === 'inventory' && !showItemForm && !selectedFolder && (
                 <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
                   <div className="flex justify-between items-center mb-8">
                     <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Catálogo de Inventario</h2>
-                    {isAdmin && (
-                      <div className="flex gap-3">
+                    <div className="flex gap-3">
+                      {isAdmin && (
                         <button onClick={handlePrintAllLabels} className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
-                          <Printer size={18}/> Imprimir Catálogo de Etiquetas
+                          <Printer size={18}/> 🖨️ Imprimir Etiquetas
                         </button>
-                        <button onClick={handleExportCSV} className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
-                          <Download size={18}/> Respaldar a Excel
+                      )}
+                      {currentUserData?.role === 'superadmin' && (
+                        <button onClick={handleExportCSV} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
+                          <Download size={18}/> 📊 Descargar Excel
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {CATEGORIES.map(folder => {
                        const items = inventory.filter(i => i.category === folder.name);
-                       // Alertas ahora basadas en la bandera manual
                        const alerts = items.filter(i => i.manualAlert).length;
                        return (
                         <div key={folder.id} onClick={() => setSelectedFolder(folder.name)} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200 cursor-pointer hover:shadow-xl hover:border-blue-400 transition-all group relative overflow-hidden">
@@ -778,7 +782,6 @@ ${currentUserData.name}
                 </div>
               )}
 
-              {/* LISTA DE ITEMS DENTRO DE CARPETA */}
               {activeTab === 'inventory' && !showItemForm && selectedFolder && (
                  <div className="space-y-4 animate-fade-in max-w-7xl mx-auto flex flex-col h-full">
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
@@ -812,8 +815,6 @@ ${currentUserData.name}
                           
                           return (
                             <div key={item.id} className={`bg-white rounded-2xl border-2 ${item.manualAlert ? 'border-red-300 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border-transparent shadow-sm'} overflow-hidden hover:shadow-xl hover:border-blue-300 transition-all flex flex-col relative`}>
-                              
-                              {/* --- ETIQUETAS FLOTANTES DE ESTADO --- */}
                               <div className="absolute top-2 left-2 flex gap-1 z-10">
                                 {item.sealStatus === 'in_use' ? (
                                    <span className="bg-amber-100/90 text-amber-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-amber-200 flex items-center gap-1"><PackageOpen size={10}/> En Uso</span>
@@ -914,7 +915,6 @@ ${currentUserData.name}
                         <div className="bg-white rounded-3xl max-w-4xl w-full p-8 relative shadow-2xl my-auto">
                           <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors z-20"><X size={24}/></button>
                           
-                          {/* Banner superior si hay alerta manual */}
                           {viewingItem.manualAlert && (
                             <div className="bg-red-500 text-white p-3 -mx-8 -mt-8 mb-6 rounded-t-3xl flex items-center justify-center gap-2 font-black uppercase tracking-wider text-sm shadow-md">
                               <AlertTriangle size={18} className="animate-pulse" /> ALERTA DE STOCK / INCIDENCIA REPORTADA
@@ -923,14 +923,12 @@ ${currentUserData.name}
                           
                           <div className="flex flex-col md:flex-row gap-8 mb-6">
                             
-                            {/* GALERÍA DE IMÁGENES (Soporta múltiples) */}
                             <div className="w-full md:w-1/3 flex flex-col gap-3">
                                <div className="w-full aspect-square bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
                                  {(viewingItem.imageUrls && viewingItem.imageUrls.length > 0) || viewingItem.imageUrl ? (
                                    <img src={viewingItem.imageUrls ? viewingItem.imageUrls[0] : viewingItem.imageUrl} className="w-full h-full object-cover"/> 
                                  ) : <ImageIcon size={64} className="text-gray-300"/>}
                                </div>
-                               {/* Miniaturas si hay mas de 1 */}
                                {viewingItem.imageUrls && viewingItem.imageUrls.length > 1 && (
                                   <div className="grid grid-cols-3 gap-2">
                                      {viewingItem.imageUrls.slice(1).map((imgUrl, i) => (
@@ -949,7 +947,6 @@ ${currentUserData.name}
                                   <p className="text-sm text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg inline-block border"><QrCode size={14} className="inline mr-2"/>{viewingItem.barcode}</p>
                                 </div>
 
-                                {/* BOTONES ESTADO Y ALERTA (Interactivos) */}
                                 {isAdmin && (
                                   <div className="flex flex-col gap-2 shrink-0">
                                     <button 
@@ -1084,8 +1081,6 @@ ${currentUserData.name}
                       </div>
                       
                       <div className="flex flex-col sm:flex-row items-start gap-6">
-                         
-                         {/* Grid de previsualizaciones */}
                          <div className="flex gap-2 flex-wrap">
                            {imagePreviews.map((preview, index) => (
                              <div key={index} className="w-24 h-24 rounded-xl bg-white border-2 border-gray-300 overflow-hidden shrink-0 shadow-sm relative group">
@@ -1170,10 +1165,7 @@ ${currentUserData.name}
                       <textarea name="observations" defaultValue={editingItem?.observations} placeholder="Condiciones especiales, notas de almacenamiento, sensibilidad, etc." rows="3" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none"></textarea>
                     </div>
 
-                    {/* --- Stock Engine Mejorado (Con Selector de Uso/Sellado y Manual Alert) --- */}
                     <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-5 gap-6 pt-6 border-t border-gray-100">
-                      
-                      {/* Estado Sellado / En Uso */}
                       <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 col-span-1 sm:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Estado del Contenedor</label>
                         <div className="flex gap-2 bg-white p-1 rounded-xl border border-gray-300">
@@ -1197,11 +1189,9 @@ ${currentUserData.name}
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Unidad *</label>
                         <input name="unit" defaultValue={formStockType === 'jar' ? '%' : (editingItem?.unit || 'uds')} readOnly={formStockType === 'jar'} required placeholder="Ej. ml" className={`w-full p-2 border border-gray-300 rounded-xl font-bold text-lg text-center outline-none ${formStockType === 'jar' ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white'}`} />
                       </div>
-                      
                       <input type="hidden" name="minThreshold" value={editingItem?.minThreshold || 1} />
                     </div>
                     
-                    {/* Link de Compra Directo */}
                     <div className="col-span-1 md:col-span-2">
                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Enlace Directo de Compra (URL)</label>
                        <input name="purchaseLink" defaultValue={editingItem?.purchaseLink} placeholder="https://tienda-proveedor.com/producto..." className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
@@ -1274,7 +1264,6 @@ ${currentUserData.name}
                                   <p className="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded border"><QrCode size={14} className="inline mr-1"/>{scannedItem.barcode}</p>
                                 </div>
                               </div>
-                              {/* Soportar Array de Imagenes */}
                               {(scannedItem.imageUrls && scannedItem.imageUrls.length > 0) || scannedItem.imageUrl ? (
                                 <img src={scannedItem.imageUrls ? scannedItem.imageUrls[0] : scannedItem.imageUrl} className="w-24 h-24 rounded-xl object-cover border-2 border-gray-200 shadow-sm shrink-0" />
                               ) : null}
@@ -1322,7 +1311,6 @@ ${currentUserData.name}
                               </div>
                             </div>
                             
-                            {/* --- EN LA FICHA DE ESCÁNER (Botón de Compra Directa) --- */}
                             {scannedItem.purchaseLink && (
                               <a href={scannedItem.purchaseLink} target="_blank" className="block w-full text-center py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 mb-4 shadow-md transition-transform hover:-translate-y-1">
                                 🛒 Comprar / Reabastecer Reactivo
