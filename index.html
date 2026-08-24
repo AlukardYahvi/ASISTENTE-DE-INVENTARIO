@@ -3,1577 +3,674 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LabManager - Asistente de Inventario (Pro)</title>
+  <title>LabManager Pro - Panel Principal</title>
   
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Babel para React/JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Lector de Códigos de Barras y QR -->
-  <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-    .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-    #qr-reader, #qr-reader-form { width: 100%; border-radius: 0.5rem; overflow: hidden; border: 2px solid #bfdbfe; }
-    #qr-reader__dashboard_section_csr span { color: #1e3a8a !important; font-weight: bold; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc; /* slate-50 */
+      color: #0f172a; /* slate-900 */
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Animaciones suaves */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+    
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    .animate-slide-in-right { animation: slideInRight 0.3s ease-out forwards; }
+
+    /* Scrollbar estilizado */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Efectos Glassmorphism */
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+    
+    .glass-sidebar {
+      background: rgba(15, 23, 42, 0.95); /* slate-900 */
+      backdrop-filter: blur(12px);
+    }
+
+    /* Ocultar barra de scroll en móviles pero permitir scroll */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="bg-slate-50 text-gray-900 font-sans">
-  
+<body>
   <div id="root"></div>
 
   <script type="text/babel" data-type="module">
-    import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
+    import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
     import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+    
+    // Firebase Imports
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-    import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-    import * as LucideIcons from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
+    import { 
+      getAuth, 
+      onAuthStateChanged, 
+      signInWithEmailAndPassword,
+      signInWithPopup,
+      GoogleAuthProvider,
+      signOut
+    } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+    import { 
+      getFirestore, 
+      collection, 
+      onSnapshot, 
+      query, 
+      orderBy, 
+      limit 
+    } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
+    // Iconos de Lucide
+    import * as LucideIcons from 'https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0';
     const { 
-      LayoutDashboard, Boxes, ScanLine, AlertTriangle, Search, Plus, Minus,
-      Camera, Keyboard, CheckCircle2, PackageSearch, MapPin, History,
-      Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
-      Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
-      Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2,
-      Dna, TestTubes, FlaskConical, ArrowRightLeft, Package, PackageOpen, Bell, BellRing, MinusCircle
+      LayoutDashboard, FolderOpen, ScanLine, Settings, LogOut, 
+      Boxes, Search, Bell, Menu, X, ChevronRight, Activity, 
+      Users, Beaker, Dna, FlaskConical, AlertTriangle, CheckCircle2,
+      Clock, ArrowRight, ShieldAlert, Zap, Lock
     } = LucideIcons;
 
-    const MIS_CREDENCIALES_FIREBASE = {
+    // Configuración de Firebase (asegúrate de que coincida con tus otros archivos)
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
       apiKey: "AIzaSyDeaQnmO8nRG4stRrbnmONaz_k1EUWqVHc",
       authDomain: "asistente-de-inventario.firebaseapp.com",
       projectId: "asistente-de-inventario",
       storageBucket: "asistente-de-inventario.firebasestorage.app",
       messagingSenderId: "972615078649",
-      appId: "1:972615078649:web:a803b9bd801a2481688828",
-      measurementId: "G-MTYN0VSK14"
+      appId: "1:972615078649:web:a803b9bd801a2481688828"
     };
 
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : MIS_CREDENCIALES_FIREBASE;
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'lab-manager-yahvi';
+    const googleProvider = new GoogleAuthProvider();
+    const appId = 'lab-manager-yahvi';
 
-    // Se han añadido las dos nuevas categorías solicitadas
-    const CATEGORIES = [
-      { id: 'equipos', name: 'Equipos y Aparatos Fijos', icon: '💻', color: 'bg-blue-100 text-blue-700' },
-      { id: 'cristaleria', name: 'Cristalería y Plásticos', icon: '🧪', color: 'bg-cyan-100 text-cyan-700' },
-      { id: 'reactivos', name: 'Reactivos Generales', icon: '🧫', color: 'bg-purple-100 text-purple-700' },
-      { id: 'kits', name: 'Kits y Columnas (RNA/DNA/Prot)', icon: '🧬', color: 'bg-emerald-100 text-emerald-700' },
-      { id: 'cultivo', name: 'Cultivo Celular', icon: '🦠', color: 'bg-rose-100 text-rose-700' },
-      { id: 'consumibles', name: 'Consumibles Generales', icon: '📦', color: 'bg-amber-100 text-amber-700' },
-      { id: 'biomol', name: 'Biología Molecular', icon: '🧬', color: 'bg-indigo-100 text-indigo-700' },
-      { id: 'cuarto_cultivo', name: 'Cuarto de Cultivo (Materiales)', icon: '🌿', color: 'bg-green-100 text-green-700' }
-    ];
-
+    // Lista de administradores autorizados
     const SUPER_ADMIN_EMAILS = [
       'yahvi.edsel.hernandez@gmail.com',
       'asistentelicam@gmail.com',
       'nnajerag@ipn.mx',
       'cgomezm310393@gmail.com',
-      'maortizf03@gmail.com',
-      'avalentinaregab@gmail.com'
+      'avalentinaregab@gmail.com',
+      'alymico53@gmail.com'
     ];
 
-    function LabInventoryApp() {
-      const [firebaseUser, setFirebaseUser] = useState(null);
-      const [currentUserData, setCurrentUserData] = useState(null);
-      const [allUsers, setAllUsers] = useState([]);
-      const [authErrorDomain, setAuthErrorDomain] = useState(false);
-      const [mockEmail, setMockEmail] = useState(SUPER_ADMIN_EMAILS[0]);
-      
-      const [activeTab, setActiveTab] = useState('dashboard');
-      const [inventory, setInventory] = useState([]);
-      const [logs, setLogs] = useState([]);
-      const [searchQuery, setSearchQuery] = useState('');
+    function LoginScreen() {
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
+
+      const handleEmailLogin = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+          console.error(err);
+          setError('Credenciales inválidas o error de conexión.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleGoogleLogin = async () => {
+        setError('');
+        setLoading(true);
+        try {
+          await signInWithPopup(auth, googleProvider);
+        } catch (err) {
+          console.error(err);
+          setError('Error al iniciar sesión con Google.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+          {/* Elementos decorativos de fondo */}
+          <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-50 animate-pulse"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-600 rounded-full mix-blend-multiply filter blur-[128px] opacity-50 animate-pulse" style={{ animationDelay: '2s' }}></div>
+
+          <div className="bg-white/10 glass-panel border border-white/20 p-8 rounded-[2rem] shadow-2xl w-full max-w-md z-10 animate-fade-in relative">
+            
+            <div className="text-center mb-8">
+              <div className="bg-gradient-to-br from-blue-500 to-cyan-500 w-16 h-16 rounded-2xl mx-auto flex items-center justify-center shadow-lg mb-4 transform -rotate-6">
+                <Boxes className="text-white" size={32} />
+              </div>
+              <h1 className="text-3xl font-black text-white tracking-tight">LabManager <span className="text-blue-400">Pro</span></h1>
+              <p className="text-slate-300 mt-2 text-sm font-medium">Sistema Integral de Gestión de Laboratorio</p>
+            </div>
+
+            {error && (
+              <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl mb-6 text-sm flex items-start gap-2 animate-slide-in-right">
+                <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                <p>{error}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleEmailLogin} className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Correo Electrónico</label>
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-800/50 border border-slate-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 ring-blue-500 transition-all placeholder-slate-500"
+                  placeholder="usuario@instituto.mx"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">Contraseña</label>
+                <input 
+                  type="password" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-800/50 border border-slate-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 ring-blue-500 transition-all placeholder-slate-500"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4 disabled:opacity-70"
+              >
+                {loading ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : <><Lock size={18}/> Iniciar Sesión</>}
+              </button>
+            </form>
+
+            <div className="relative flex items-center justify-center mb-6">
+              <div className="absolute border-t border-slate-600 w-full"></div>
+              <span className="bg-slate-900 px-3 text-xs font-bold text-slate-400 uppercase tracking-wider relative z-10 rounded-full">o ingresa con</span>
+            </div>
+
+            <button 
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-3 disabled:opacity-70"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Google Workspace
+            </button>
+            
+            <p className="text-center text-xs text-slate-400 mt-6 mt-8">
+              Solo personal autorizado. Para acceso contacta a tu administrador de laboratorio.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    function MainApp() {
+      const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
-
-      const [selectedFolder, setSelectedFolder] = useState(null);
-      const [showItemForm, setShowItemForm] = useState(false);
-      const [editingItem, setEditingItem] = useState(null);
-      const [viewingItem, setViewingItem] = useState(null);
-      const [reassignItem, setReassignItem] = useState(null);
+      const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'inventory', 'scanner'
+      const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
       
-      // NUEVO ESTADO PARA EL MODAL MANUAL DE DESCUENTO
-      const [consumeItem, setConsumeItem] = useState(null);
-
-      const [generatedQR, setGeneratedQR] = useState('');
-      const [imagePreviews, setImagePreviews] = useState([]); 
-
-      const [scanInput, setScanInput] = useState('');
-      const [scannedItem, setScannedItem] = useState(null);
-      const [scanAction, setScanAction] = useState('info');
-      const [scanAmount, setScanAmount] = useState(1);
-      const [scanReason, setScanReason] = useState('Protocolo rutinario');
-      const [cameraActive, setCameraActive] = useState(false);
-      const [cameraActiveForm, setCameraActiveForm] = useState(false);
-      const [viewMode, setViewMode] = useState('table');
-      const [formStockType, setFormStockType] = useState('unit');
-      const [formSealStatus, setFormSealStatus] = useState('sealed');
-      
-      // NUEVO ESTADO PARA EL TOGGLE DE ALERTA DE STOCK MINIMO
-      const [formEnableAlert, setFormEnableAlert] = useState(true);
-      
-      const scannerInputRef = useRef(null);
-      const hiddenSubmitBtnRef = useRef(null);
+      // Estados para métricas globales (mock o reales)
+      const [stats, setStats] = useState({
+        oligosCount: 0,
+        abCount: 0,
+        rxCount: 0,
+        recentActivity: []
+      });
 
       useEffect(() => {
-        const initAuth = async () => {
-          try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(auth, __initial_auth_token);
-            }
-          } catch (err) { console.error(err); }
-        };
-        initAuth();
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+          if (currentUser) {
+            setUser({
+              uid: currentUser.uid,
+              email: currentUser.email,
+              name: currentUser.displayName || currentUser.email.split('@')[0],
+              photoURL: currentUser.photoURL,
+              isSuperAdmin: currentUser.email ? SUPER_ADMIN_EMAILS.includes(currentUser.email) : false
+            });
+            
+            // Pasar el token a localStorage de forma segura (simulado para este entorno unificado)
+            // En un entorno real, usarías getIdToken() y lo pasarías por query params o localStorage seguro
+            currentUser.getIdToken().then(token => {
+               window.localStorage.setItem('labmanager_auth_token', token);
+            });
 
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-          setFirebaseUser(user);
-          if (user && user.email) {
-            const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', user.uid);
-            try {
-               await setDoc(userRef, {
-                uid: user.uid, email: user.email, name: user.displayName || user.email.split('@')[0],
-                photoURL: user.photoURL || '', lastLogin: new Date().toISOString(),
-                ...(SUPER_ADMIN_EMAILS.includes(user.email) ? { role: 'superadmin' } : {}) 
-              }, { merge: true });
-            } catch(e) {}
-          } else if (!user) { setCurrentUserData(null); }
+            loadGlobalStats();
+          } else {
+            setUser(null);
+            window.localStorage.removeItem('labmanager_auth_token');
+          }
+          setLoading(false);
         });
         return () => unsubscribe();
       }, []);
 
-      useEffect(() => {
-        if (!firebaseUser) { setLoading(false); return; }
-
-        const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
-        const unsubInv = onSnapshot(inventoryRef, (snapshot) => {
-          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setInventory(data);
-          if(viewingItem) {
-             const updated = data.find(i => i.id === viewingItem.id);
-             if(updated) setViewingItem(updated);
-             else setViewingItem(null);
-          }
-          setLoading(false);
-        });
-
-        const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'lab_users');
-        const unsubUsers = onSnapshot(usersRef, (snapshot) => {
-          const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setAllUsers(usersList);
-          const myData = usersList.find(u => u.uid === firebaseUser.uid);
-          if (myData) {
-             if (SUPER_ADMIN_EMAILS.includes(myData.email)) myData.role = 'superadmin';
-             if (!myData.role) myData.role = 'user'; 
-             setCurrentUserData(myData);
-          }
-        });
-
-        const logsRef = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
-        const unsubLogs = onSnapshot(logsRef, (snapshot) => {
-          const logsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setLogs(logsList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
-        });
-
-        return () => { unsubInv(); unsubUsers(); unsubLogs(); };
-      }, [firebaseUser, viewingItem]);
-
-      useEffect(() => {
-        let html5QrcodeScanner;
-        if (cameraActive && activeTab === 'scanner') {
-          html5QrcodeScanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-          html5QrcodeScanner.render((decodedText) => {
-            setScanInput(decodedText); setCameraActive(false); html5QrcodeScanner.clear();
-            setTimeout(() => { if (hiddenSubmitBtnRef.current) hiddenSubmitBtnRef.current.click(); }, 150);
-          }, () => {});
-        }
-        return () => { if (html5QrcodeScanner) html5QrcodeScanner.clear().catch(()=>{}); };
-      }, [cameraActive, activeTab]);
-
-      useEffect(() => {
-        let formScanner;
-        if (cameraActiveForm && showItemForm) {
-          formScanner = new Html5QrcodeScanner("qr-reader-form", { fps: 10, qrbox: { width: 250, height: 150 } }, false);
-          formScanner.render((decodedText) => {
-            setGeneratedQR(decodedText); setCameraActiveForm(false); formScanner.clear();
-          }, () => {});
-        }
-        return () => { if (formScanner) formScanner.clear().catch(()=>{}); };
-      }, [cameraActiveForm, showItemForm]);
-
-      useEffect(() => {
-        if (showItemForm && editingItem) {
-          const loadedImages = editingItem.imageUrls ? [...editingItem.imageUrls] : (editingItem.imageUrl ? [editingItem.imageUrl] : []);
-          setImagePreviews(loadedImages);
-          setFormStockType(editingItem.stockType || 'unit');
-          setFormSealStatus(editingItem.sealStatus || 'sealed');
-          setFormEnableAlert(editingItem.enableLowStockAlert !== false); // Lee el valor guardado o activa por defecto
-        } else if (!showItemForm) {
-          setImagePreviews([]);
-          setFormStockType('unit');
-          setFormSealStatus('sealed');
-          setFormEnableAlert(true); // Activa por defecto al crear uno nuevo
-        }
-      }, [showItemForm, editingItem]);
-
-      const handleImageUpload = (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-        if (imagePreviews.length + files.length > 4) {
-           return alert("Puedes subir un máximo de 4 fotografías por artículo.");
-        }
-
-        files.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-              const canvas = document.createElement('canvas');
-              const MAX_WIDTH = 600; const MAX_HEIGHT = 600;
-              let width = img.width; let height = img.height;
-              if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
-              else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-              canvas.width = width; canvas.height = height;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(img, 0, 0, width, height);
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-              setImagePreviews(prev => [...prev, dataUrl].slice(0, 4));
-            }
-            img.src = event.target.result;
-          }
-          reader.readAsDataURL(file);
-        });
-      };
-
-      const removeImagePreview = (indexToRemove) => {
-         setImagePreviews(prev => prev.filter((_, idx) => idx !== indexToRemove));
-      };
-
-      const isAdmin = currentUserData?.role === 'superadmin' || currentUserData?.role === 'admin';
-      const alertedItems = inventory.filter(item => item.manualAlert === true);
-      
-      // NUEVO: Filtra usando el threshold SOLO SI el toggle de alerta está activado
-      const lowStockItems = inventory.filter(item => item.qty <= (item.minThreshold || 1) && item.enableLowStockAlert !== false);
-      
-      const getExpiringSoonItems = () => {
-        const today = new Date(); const thirtyDays = new Date(); thirtyDays.setDate(today.getDate() + 30);
-        return inventory.filter(i => i.expirationDate && new Date(i.expirationDate) <= thirtyDays && new Date(i.expirationDate) >= today).sort((a,b) => new Date(a.expirationDate) - new Date(b.expirationDate));
-      };
-      const expiringItems = getExpiringSoonItems();
-
-      const handleOrderStatusChange = async (item, newStatus) => {
-        if (!isAdmin) return alert("Solo administradores.");
-        let newQty = item.qty;
-        let updateData = { orderStatus: newStatus };
-
-        if (newStatus === 'received') {
-          const threshold = item.minThreshold || 1;
-          const addAmount = (threshold * 2) - item.qty; 
-          newQty = item.qty + (addAmount > 0 ? addAmount : threshold);
-          updateData.qty = newQty;
-          updateData.orderStatus = 'pending';
-          updateData.manualAlert = false; 
-          updateData.sealStatus = 'sealed'; 
-          
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
-            itemId: item.id, itemName: item.name, action: 'add', amount: newQty - item.qty, reason: 'Recepción de Pedido Nuevo',
-            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
-          });
-          alert(`¡Pedido recibido! Se han ingresado ${newQty - item.qty} ${item.stockType === 'jar' ? '%' : item.unit} al inventario.`);
-        }
-        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', item.id), updateData, { merge: true }); } catch (e) { alert("Error."); }
-      };
-
-      const handleSendPurchaseRequest = (item) => {
-        const emailTo = "nnajerag@ipn.mx"; 
-        const subject = encodeURIComponent(`Solicitud de Compra / Reabastecimiento: ${item.name}`);
+      const loadGlobalStats = () => {
+        // En una app real, harías queries a Firestore aquí.
+        // Simularemos la carga para la interfaz
         
-        const bodyText = `Estimada Dra. Nayelli Nájera,
-
-Por medio del presente correo, me dirijo a usted para solicitar formalmente la compra o reabastecimiento del siguiente artículo, el cual ha alcanzado un nivel crítico o requiere atención en el inventario del laboratorio.
-
---- DETALLES TÉCNICOS DEL ARTÍCULO ---
-• Producto / Reactivo: ${item.name}
-• Categoría: ${item.category || 'N/A'}
-• Proveedor y Marca: ${item.provider || 'N/A'} / ${item.brand || 'N/A'}
-• Número de Catálogo: ${item.catalogNum || 'N/A'}
-• Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo de seguridad es ${item.minThreshold || 'N/A'})
-
---- ENLACES Y REFERENCIAS ---
-• Enlace sugerido de compra: ${item.purchaseLink || 'No especificado en sistema'}
-• Referencia Visual: ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
-
-Quedo a su entera disposición en caso de requerir información adicional o especificaciones para proceder con el trámite.
-
-Atentamente,
-${currentUserData.name}
-(Solicitud generada automáticamente vía LabManager Pro)`;
-
-        const body = encodeURIComponent(bodyText);
-        window.location.href = `mailto:${emailTo}?subject=${subject}&body=${body}`;
-        handleOrderStatusChange(item, 'ordered');
-      };
-
-      const toggleManualAlert = async (id, currentStatus) => {
-         try {
-           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id), { manualAlert: !currentStatus }, { merge: true });
-         } catch(e) { console.error(e); }
-      };
-
-      const toggleSealStatus = async (id, currentStatus) => {
-         try {
-           const newStatus = currentStatus === 'sealed' ? 'in_use' : 'sealed';
-           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id), { sealStatus: newStatus }, { merge: true });
-           
-           if(newStatus === 'in_use') {
-             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
-               itemId: id, itemName: viewingItem?.name || 'Artículo', action: 'update', amount: 0, reason: 'Se abrió / Comenzó a usarse',
-               userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
-             });
-           }
-         } catch(e) { console.error(e); }
-      };
-
-      // DESCARGA DE EXCEL DETALLADA
-      const handleExportCSV = () => {
-        if (currentUserData.role !== 'superadmin') return alert("Solo los superadministradores pueden descargar la base de datos completa.");
-        
-        // Headers independientes para Excel (Incluye Caracteristicas y AlertaAutomatica)
-        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Caracteristicas_Tecnicas', 'Cantidad', 'Estado_Fisico', 'Tipo_Stock', 'Unidad', 'Alerta_BajoStock_Activa', 'Alerta_Manual', 'Ubicacion', 'Caducidad', 'Observaciones', 'Enlace_Compra'];
-        
-        const rows = inventory.map(i => {
-          // Limpieza exhaustiva para que Excel no se rompa con comillas o saltos de línea
-          const obs = i.observations ? i.observations.replace(/"/g, '""').replace(/\n/g, ' ') : '';
-          const chars = i.characteristics ? i.characteristics.replace(/"/g, '""').replace(/\n/g, ' ') : '';
-          const name = i.name ? i.name.replace(/"/g, '""') : '';
-          
-          return [
-            `"${i.barcode||i.id}"`, `"${name}"`, `"${i.category||''}"`, 
-            `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, `"${i.provider||''}"`, `"${i.brand||''}"`, `"${chars}"`,
-            i.qty, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.stockType||'unit'}"`, `"${i.unit||''}"`, `"${i.enableLowStockAlert !== false ? 'SI' : 'NO'}"`, `"${i.manualAlert ? 'SI' : 'NO'}"`, `"${i.location||''}"`, `"${i.expirationDate||''}"`, `"${obs}"`, `"${i.purchaseLink||''}"`
-          ];
+        // Listener real para Oligos
+        const unsubOligos = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'inv_oligos'), (snap) => {
+           setStats(prev => ({...prev, oligosCount: snap.size}));
         });
         
-        // El \uFEFF asegura que Excel respete los acentos (UTF-8)
-        const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `Inventario_Global_LabManager_${new Date().toLocaleDateString().replace(/\//g,'-')}.csv`;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        // Listener real para Anticuerpos
+        const unsubAbs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'inv_anticuerpos'), (snap) => {
+           setStats(prev => ({...prev, abCount: snap.size}));
+        });
+
+        // Listener real para Reactivos
+        const unsubRx = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'inv_reactivos'), (snap) => {
+           setStats(prev => ({...prev, rxCount: snap.size}));
+        });
+
+        // Simulación de actividad reciente para el Dashboard
+        setTimeout(() => {
+           setStats(prev => ({
+             ...prev,
+             recentActivity: [
+               { id: 1, action: 'Uso de Anticuerpo', item: 'Anti-GAPDH (Rabbit)', user: 'Yahvi Hernández', time: 'Hace 10 min', icon: <Beaker size={16} className="text-indigo-500"/>, color: 'bg-indigo-100' },
+               { id: 2, action: 'Registro Nuevo', item: 'Oligo p53-Fwd', user: 'Nayelli Nájera', time: 'Hace 1 hora', icon: <Dna size={16} className="text-emerald-500"/>, color: 'bg-emerald-100' },
+               { id: 3, action: 'Alerta Stock Bajo', item: 'SYBR Green 2X', user: 'Sistema', time: 'Hace 3 horas', icon: <AlertTriangle size={16} className="text-amber-500"/>, color: 'bg-amber-100' },
+               { id: 4, action: 'Descuento de Reactivo', item: 'Agua DEPC (10mL)', user: 'Alejandro G.', time: 'Ayer', icon: <FlaskConical size={16} className="text-cyan-500"/>, color: 'bg-cyan-100' }
+             ]
+           }));
+        }, 1000);
       };
 
-      // IMPRESIÓN DE ETIQUETAS
-      const handlePrintAllLabels = () => {
-        const printWindow = window.open('', '_blank');
-        const itemsToPrint = selectedFolder ? inventory.filter(i => i.category === selectedFolder) : inventory;
-        
-        if (itemsToPrint.length === 0) return alert("No hay elementos para imprimir en esta vista.");
-
-        let labelsHtml = itemsToPrint.map(item => {
-          const code = item.barcode || item.id;
-          const name = item.name;
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(code)}`;
-          const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(code)}&scaleX=2&scaleY=1&includetext=true`;
-          
-          return `
-            <div class="label-box">
-              <div class="title">${name}</div>
-              <div class="codes">
-                 <img src="${qrUrl}" alt="QR" class="qr" />
-                 <img src="${barcodeUrl}" alt="Barcode" class="barcode" />
-              </div>
-              <div class="meta"><strong>Lote:</strong> ${item.lotNum || '--'} | <strong>Cat:</strong> ${item.catalogNum || '--'}</div>
-            </div>
-          `;
-        }).join('');
-
-        printWindow.document.write(`
-          <html><head><title>Catálogo General de Etiquetas</title><style>
-            body { font-family: sans-serif; margin: 0; padding: 20px; background: #fff;}
-            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7cm, 1fr)); gap: 15px; }
-            .label-box { border: 1px dashed #666; padding: 10px; display: flex; flex-direction: column; align-items: center; text-align: center; border-radius: 4px;}
-            .title { font-size: 12px; font-weight: bold; margin-bottom: 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .codes { display: flex; gap: 10px; align-items: center; justify-content: center; width: 100%;}
-            .qr { width: 50px; height: 50px; }
-            .barcode { height: 40px; max-width: 120px; object-fit: contain; }
-            .meta { font-size: 10px; color: #333; margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; width: 100%;}
-            @media print { 
-              body { padding: 0; } 
-              .label-box { page-break-inside: avoid; border: 1px solid #000; }
-            }
-          </style></head><body>
-            <h2 style="text-align:center; margin-bottom: 20px;">Catálogo General de Etiquetas</h2>
-            <div class="grid">${labelsHtml}</div>
-            <script>
-              setTimeout(() => { window.print(); }, 2000); 
-            <\/script>
-          </body></html>
-        `);
-        printWindow.document.close();
-      };
-
-      const handlePrintLabel = (itemData, fallback = null) => {
-        const code = itemData?.barcode || fallback; const name = itemData?.name || 'LabManager';
-        if (!code) return alert("Genera o escanea un código primero.");
-        const printWindow = window.open('', '_blank');
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(code)}`;
-        const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(code)}&scaleX=2&scaleY=1&includetext=true`;
-
-        printWindow.document.write(`
-          <html><head><title>Imprimir</title><style>
-            body{margin:0;display:flex;justify-content:center;align-items:center;padding-top:20px;font-family:sans-serif;} 
-            .label{width:6.5cm;height:4.5cm;border:1px dashed #000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0.2cm;box-sizing:border-box;} 
-            .title{font-size:11px;font-weight:bold;text-align:center;overflow:hidden;white-space:nowrap;max-width:100%;margin-bottom:6px;} 
-            .codes { display: flex; gap: 10px; align-items: center; justify-content: center; width: 100%;}
-            .qr{width:1.8cm;height:1.8cm;} 
-            .barcode{height:1.2cm; max-width: 3.5cm; object-fit: contain;}
-            @media print{@page{margin:0;} body{padding:0;} .label{border:none;}}
-          </style></head><body>
-            <div class="label">
-              <div class="title">${name}</div>
-              <div class="codes">
-                <img src="${qrUrl}" alt="QR"/>
-                <img src="${barcodeUrl}" alt="Barcode"/>
-              </div>
-            </div>
-            <script>setTimeout(() => { window.print(); window.close(); }, 1500);<\/script>
-          </body></html>
-        `);
-        printWindow.document.close();
-      };
-
-      const handleGoogleLogin = async () => {
-        const hostname = window.location.hostname || '';
-        if (hostname.includes('googleusercontent.com') || hostname.includes('csb.app') || window.self !== window.top) return setAuthErrorDomain(true);
-        try { setLoading(true); await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { setAuthErrorDomain(true); setLoading(false); }
-      };
-      const handleSimulatedLogin = async () => {
-        setLoading(true);
-        try {
-          let currentUid = auth.currentUser?.uid;
-          if (!currentUid) { const cred = await signInAnonymously(auth); currentUid = cred.user.uid; }
-          const role = SUPER_ADMIN_EMAILS.includes(mockEmail) ? 'superadmin' : 'user';
-          const simData = { uid: currentUid, email: mockEmail, name: mockEmail.split('@')[0], photoURL: '', lastLogin: new Date().toISOString(), role };
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', currentUid), simData, { merge: true });
-          setCurrentUserData(simData);
-        } catch(e) {} setLoading(false);
-      };
-      const handleLogout = () => { auth.signOut(); setActiveTab('dashboard'); setCurrentUserData(null); setAuthErrorDomain(false); };
-      const handleUpdateUserRole = async (userId, newRole) => {
-        if (currentUserData.role !== 'superadmin') return;
-        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'lab_users', userId), { role: newRole }, { merge: true }); } catch(e) {}
-      };
-
-      const generateUniqueQR = () => {
-        let code = ''; let isUnique = false;
-        while (!isUnique) {
-          code = `LAB-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substr(2,4).toUpperCase()}`;
-          if (!inventory.some(i => i.barcode === code)) isUnique = true;
-        }
-        setGeneratedQR(code); return code;
-      };
-
-      const handleSaveItem = async (e) => {
-        e.preventDefault(); if (!isAdmin) return alert("Sin permisos.");
-        const formData = new FormData(e.target); const itemData = Object.fromEntries(formData.entries());
-        
-        itemData.qty = Number(itemData.qty); 
-        itemData.minThreshold = Number(itemData.minThreshold);
-        if (generatedQR && !itemData.barcode) itemData.barcode = generatedQR;
-        if (!itemData.orderStatus) itemData.orderStatus = 'pending';
-        
-        itemData.imageUrls = imagePreviews;
-        itemData.sealStatus = formSealStatus;
-        
-        // Guardamos la configuración de alerta
-        itemData.enableLowStockAlert = formEnableAlert;
-
-        if(editingItem && editingItem.manualAlert !== undefined) {
-           itemData.manualAlert = editingItem.manualAlert;
-        } else {
-           itemData.manualAlert = false;
-        }
-
-        const docId = editingItem ? editingItem.id : `item_${Date.now()}`;
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', docId), itemData, { merge: true });
-          if (!editingItem) {
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
-              itemId: docId, itemName: itemData.name, action: 'create', amount: itemData.qty, reason: 'Registro inicial',
-              userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
-            });
-          }
-          setShowItemForm(false); setEditingItem(null); setGeneratedQR(''); setImagePreviews([]);
-        } catch (err) { alert("Error: " + err.message); }
-      };
-
-      const handleDeleteItem = async (id, name) => {
-        if (!SUPER_ADMIN_EMAILS.includes(currentUserData.email)) return alert("Solo los Propietarios pueden eliminar registros completos.");
-        if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente '${name}' del inventario? Esta acción no se puede deshacer.`)) {
-          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id));
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
-            itemId: id, itemName: name, action: 'delete', amount: 0, reason: 'Eliminación del sistema',
-            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
-          });
+      const handleLogout = () => {
+        if(window.confirm('¿Cerrar sesión de LabManager?')) {
+          signOut(auth);
         }
       };
 
-      const handleReassignSubmit = async (e) => {
-        e.preventDefault();
-        if (!isAdmin) return alert("Sin permisos.");
-        const formData = new FormData(e.target);
-        const newCategory = formData.get('newCategory');
-
-        if (newCategory === reassignItem.category) {
-          alert("El elemento ya pertenece a esta categoría.");
-          return;
-        }
-
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', reassignItem.id), { category: newCategory }, { merge: true });
-          
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}_${Math.floor(Math.random()*1000)}`), {
-            itemId: reassignItem.id, itemName: reassignItem.name, action: 'update', amount: reassignItem.qty, 
-            reason: `Reubicado de ${reassignItem.category} a ${newCategory}`,
-            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
-          });
-
-          setReassignItem(null);
-          if (viewingItem && viewingItem.id === reassignItem.id) {
-            setViewingItem({...viewingItem, category: newCategory});
-          }
-          alert(`Elemento movido exitosamente a ${newCategory}.`);
-        } catch (err) { alert("Error al reubicar: " + err.message); }
-      };
-
-      const handleBarcodeSubmit = (e) => {
-        if(e) e.preventDefault(); if (!scanInput.trim()) return;
-        const searchVal = scanInput.trim().toLowerCase();
-        const foundItem = inventory.find(i => 
-          i.barcode?.toLowerCase() === searchVal || 
-          i.id?.toLowerCase() === searchVal || 
-          i.catalogNum?.toLowerCase() === searchVal || 
-          i.lotNum?.toLowerCase() === searchVal
-        );
-
-        if (foundItem) { setScannedItem(foundItem); setScanAmount(1); setScanReason('Protocolo rutinario'); } 
-        else { alert(`Código, Catálogo o Lote no encontrado.`); setScannedItem(null); }
-        setScanInput(''); 
-      };
-
-      const executeScanAction = async () => {
-        if (!scannedItem) return;
-        if (scanAction === 'add' && !isAdmin) return alert("Solo administradores pueden ingresar stock.");
-        const newQty = scanAction === 'add' ? scannedItem.qty + scanAmount : scannedItem.qty - scanAmount;
-        if (newQty < 0) return alert("Stock negativo no permitido.");
-
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', scannedItem.id), { qty: newQty }, { merge: true });
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}_${Math.floor(Math.random()*1000)}`), {
-            itemId: scannedItem.id, itemName: scannedItem.name, action: scanAction, amount: scanAmount,
-            reason: scanAction === 'add' ? 'Reabastecimiento manual' : scanReason,
-            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
-          });
-          setScannedItem({ ...scannedItem, qty: newQty });
-          setScanAction('info');
-          const btn = document.getElementById('btn-action-success');
-          if(btn) { btn.innerHTML = '¡Auditoría Exitosa!'; btn.classList.add('bg-green-600'); setTimeout(() => { btn.innerHTML = 'Confirmar'; btn.classList.remove('bg-green-600'); }, 2000); }
-        } catch (e) { alert("Error."); }
-      };
-
-      // NUEVA FUNCION DE CONSUMO MANUAL DIRECTO
-      const handleConsumeSubmit = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const amountToTake = Number(formData.get('amount'));
-        const reason = formData.get('reason');
-
-        if (amountToTake <= 0) return alert("Ingresa una cantidad válida.");
-        if (amountToTake > consumeItem.qty) return alert("No hay suficiente cantidad en inventario.");
-
-        const newQty = consumeItem.qty - amountToTake;
-
-        try {
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', consumeItem.id), { qty: newQty }, { merge: true });
-          
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}_${Math.floor(Math.random()*1000)}`), {
-            itemId: consumeItem.id, itemName: consumeItem.name, action: 'remove', amount: amountToTake, 
-            reason: reason,
-            userName: currentUserData.name, userEmail: currentUserData.email, timestamp: new Date().toISOString()
-          });
-
-          setConsumeItem(null);
-          // Si estamos viendo el detalle de este item, actualizamos la vista
-          if(viewingItem && viewingItem.id === consumeItem.id) {
-             setViewingItem({...viewingItem, qty: newQty});
-          }
-        } catch (err) { alert("Error al registrar el uso: " + err.message); }
-      };
-
-      if (!currentUserData) {
+      if (loading) {
         return (
-          <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 animate-fade-in flex flex-col items-center text-center">
-              <div className="bg-blue-600 p-4 rounded-2xl text-white mb-6 shadow-[0_0_20px_rgba(37,99,235,0.4)]"><Boxes size={48} /></div>
-              <h1 className="text-3xl font-extrabold text-gray-800 mb-2">LabManager Pro</h1>
-              <p className="text-gray-500 font-medium mb-8">Asistente de Inventario de Laboratorio</p>
-              {loading ? <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-8"></div> : (
-                <div className="w-full space-y-4">
-                  {!authErrorDomain ? (
-                    <button onClick={handleGoogleLogin} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3">
-                      <svg className="w-6 h-6" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/></svg>
-                      Continuar con Google
-                    </button>
-                  ) : (
-                    <div className="bg-orange-50 p-6 rounded-xl border border-orange-200 text-left">
-                      <p className="text-sm text-orange-800 mb-4 font-medium">Entorno protegido. Simula acceso para probar:</p>
-                      <input type="email" value={mockEmail} onChange={(e) => setMockEmail(e.target.value)} className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 outline-none mb-3" />
-                      <button onClick={handleSimulatedLogin} className="w-full bg-orange-600 text-white font-bold py-3 px-4 rounded-xl shadow-md">Ingresar al Sistema</button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+          <div className="h-screen bg-slate-900 flex flex-col items-center justify-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500 mb-4"></div>
+            <p className="text-blue-400 font-bold animate-pulse">Iniciando entorno seguro...</p>
           </div>
         );
       }
 
-      return (
-        <div className="flex h-screen bg-slate-50 font-sans text-gray-900">
-          {/* SIDEBAR */}
-          <aside className="w-72 bg-slate-900 text-slate-300 flex-col hidden md:flex shadow-2xl z-20">
-            <div className="p-6 border-b border-slate-800 flex items-center gap-3 text-white">
-              <div className="bg-blue-600 p-2 rounded-lg shadow-[0_0_15px_rgba(37,99,235,0.5)]"><Boxes size={24} /></div>
-              <h1 className="font-bold text-xl">LabManager Pro</h1>
-            </div>
+      if (!user) {
+        return <LoginScreen />;
+      }
+
+      
+      const renderDashboard = () => (
+        <div className="animate-fade-in space-y-6">
+          {/* Bienvenida y Tarjetas de Resumen */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             
-            <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
-              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-2">Navegación</p>
-              <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Dashboard General</button>
-              <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><Folder size={20} /> Catálogo de Inventario</button>
-              <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'scanner' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><ScanLine size={20} /> Escáner de Uso</button>
+            {/* Tarjeta de Bienvenida */}
+            <div className="md:col-span-8 bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 text-white relative overflow-hidden shadow-xl">
+               <div className="absolute -right-10 -top-10 text-white/5 transform rotate-12">
+                 <Boxes size={250} />
+               </div>
+               <div className="relative z-10">
+                 <h2 className="text-3xl font-black mb-2">¡Hola, {user.name}! 👋</h2>
+                 <p className="text-slate-300 mb-8 max-w-lg">Bienvenido al panel central de LabManager Pro. Tienes todo bajo control. Selecciona un módulo para gestionar el inventario.</p>
+                 
+                 <div className="flex flex-wrap gap-4">
+                   <button onClick={() => setActiveTab('inventory')} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-colors shadow-lg shadow-blue-500/30">
+                     <FolderOpen size={20} /> Explorar Inventarios
+                   </button>
+                   <button onClick={() => setActiveTab('scanner')} className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-colors">
+                     <ScanLine size={20} /> Escanear Código
+                   </button>
+                 </div>
+               </div>
+            </div>
+
+            {/* Estado Rápido */}
+            <div className="md:col-span-4 grid grid-rows-3 gap-4">
+               <div className="bg-emerald-50 rounded-2xl p-4 flex items-center justify-between border border-emerald-100 shadow-sm cursor-pointer hover:shadow-md transition-all">
+                 <div className="flex items-center gap-4">
+                   <div className="bg-emerald-200/50 p-3 rounded-xl"><Dna className="text-emerald-700" size={24}/></div>
+                   <div><p className="text-xs font-bold text-emerald-600 uppercase">Oligos</p><p className="font-black text-xl text-slate-800">{stats.oligosCount} Registros</p></div>
+                 </div>
+                 <ChevronRight className="text-emerald-300" />
+               </div>
+               
+               <div className="bg-indigo-50 rounded-2xl p-4 flex items-center justify-between border border-indigo-100 shadow-sm cursor-pointer hover:shadow-md transition-all">
+                 <div className="flex items-center gap-4">
+                   <div className="bg-indigo-200/50 p-3 rounded-xl"><Beaker className="text-indigo-700" size={24}/></div>
+                   <div><p className="text-xs font-bold text-indigo-600 uppercase">Anticuerpos</p><p className="font-black text-xl text-slate-800">{stats.abCount} Registros</p></div>
+                 </div>
+                 <ChevronRight className="text-indigo-300" />
+               </div>
+
+               <div className="bg-cyan-50 rounded-2xl p-4 flex items-center justify-between border border-cyan-100 shadow-sm cursor-pointer hover:shadow-md transition-all">
+                 <div className="flex items-center gap-4">
+                   <div className="bg-cyan-200/50 p-3 rounded-xl"><FlaskConical className="text-cyan-700" size={24}/></div>
+                   <div><p className="text-xs font-bold text-cyan-600 uppercase">Reactivos</p><p className="font-black text-xl text-slate-800">{stats.rxCount} Registros</p></div>
+                 </div>
+                 <ChevronRight className="text-cyan-300" />
+               </div>
+            </div>
+          </div>
+
+          {/* Segunda Fila: Actividad y Atajos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Actividad Reciente */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+               <div className="flex justify-between items-center mb-6">
+                 <h3 className="font-black text-lg text-slate-800 flex items-center gap-2"><Activity size={20} className="text-blue-500"/> Actividad Global</h3>
+                 <button className="text-xs font-bold text-blue-600 hover:text-blue-700">Ver Todo</button>
+               </div>
+               
+               <div className="space-y-4">
+                 {stats.recentActivity.length > 0 ? stats.recentActivity.map(act => (
+                   <div key={act.id} className="flex items-start gap-4 p-3 rounded-2xl hover:bg-slate-50 transition-colors">
+                     <div className={`p-2.5 rounded-xl ${act.color} mt-1`}>{act.icon}</div>
+                     <div className="flex-1">
+                       <p className="font-bold text-slate-800 text-sm">{act.action}: <span className="font-medium text-slate-600">{act.item}</span></p>
+                       <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 font-medium">
+                         <span className="flex items-center gap-1"><User size={12}/> {act.user}</span>
+                         <span className="flex items-center gap-1"><Clock size={12}/> {act.time}</span>
+                       </div>
+                     </div>
+                   </div>
+                 )) : (
+                   <div className="text-center py-8 text-slate-400">
+                     <Clock className="mx-auto mb-2 opacity-50" size={32}/>
+                     <p className="text-sm">No hay actividad reciente.</p>
+                   </div>
+                 )}
+               </div>
+            </div>
+
+            {/* Atajos Rápidos */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+               <h3 className="font-black text-lg text-slate-800 flex items-center gap-2 mb-6"><Zap size={20} className="text-amber-500"/> Accesos Rápidos</h3>
+               <div className="grid grid-cols-2 gap-4">
+                 
+                 <a href="inventario_oligos.html" className="group bg-slate-50 p-5 rounded-2xl border border-slate-100 hover:border-emerald-300 hover:shadow-md transition-all flex flex-col items-center text-center gap-3">
+                   <div className="bg-white p-3 rounded-full shadow-sm group-hover:scale-110 transition-transform"><Dna className="text-emerald-500" size={28}/></div>
+                   <div>
+                     <p className="font-bold text-slate-700">Oligos</p>
+                     <p className="text-[10px] text-slate-400 font-medium mt-1">Ir al módulo</p>
+                   </div>
+                 </a>
+                 
+                 <a href="inventario_anticuerpos.html" className="group bg-slate-50 p-5 rounded-2xl border border-slate-100 hover:border-indigo-300 hover:shadow-md transition-all flex flex-col items-center text-center gap-3">
+                   <div className="bg-white p-3 rounded-full shadow-sm group-hover:scale-110 transition-transform"><Beaker className="text-indigo-500" size={28}/></div>
+                   <div>
+                     <p className="font-bold text-slate-700">Anticuerpos</p>
+                     <p className="text-[10px] text-slate-400 font-medium mt-1">Ir al módulo</p>
+                   </div>
+                 </a>
+
+                 <a href="reactivos.html" className="group bg-slate-50 p-5 rounded-2xl border border-slate-100 hover:border-cyan-300 hover:shadow-md transition-all flex flex-col items-center text-center gap-3">
+                   <div className="bg-white p-3 rounded-full shadow-sm group-hover:scale-110 transition-transform"><FlaskConical className="text-cyan-500" size={28}/></div>
+                   <div>
+                     <p className="font-bold text-slate-700">Reactivos</p>
+                     <p className="text-[10px] text-slate-400 font-medium mt-1">Ir al módulo</p>
+                   </div>
+                 </a>
+
+                 <button onClick={() => setActiveTab('scanner')} className="group bg-slate-800 p-5 rounded-2xl hover:bg-slate-900 shadow-md transition-all flex flex-col items-center text-center gap-3">
+                   <div className="bg-white/10 p-3 rounded-full group-hover:scale-110 transition-transform"><ScanLine className="text-blue-400" size={28}/></div>
+                   <div>
+                     <p className="font-bold text-white">Escáner QR</p>
+                     <p className="text-[10px] text-slate-400 font-medium mt-1">Lector de Tubos</p>
+                   </div>
+                 </button>
+
+               </div>
+            </div>
+
+          </div>
+        </div>
+      );
+
+      const renderInventory = () => (
+        <div className="animate-fade-in max-w-5xl mx-auto space-y-8">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-black text-slate-800 mb-2">Módulos de Inventario</h2>
+            <p className="text-slate-500">Selecciona la base de datos a la que deseas acceder. Cada módulo está especializado para un tipo específico de reactivo.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Oligos */}
+            <a href="inventario_oligos.html" className="bg-white rounded-3xl p-6 border-2 border-transparent hover:border-emerald-400 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group flex flex-col h-full relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-100 rounded-bl-full -mr-8 -mt-8 z-0 transition-transform group-hover:scale-110"></div>
+               <div className="relative z-10 flex flex-col h-full">
+                 <div className="bg-emerald-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-emerald-100">
+                   <Dna size={32} className="text-emerald-600"/>
+                 </div>
+                 <h3 className="text-2xl font-black text-slate-800 mb-2">Oligonucleótidos</h3>
+                 <p className="text-sm text-slate-500 mb-6 flex-1">Gestión especializada de cebadores/primers. Secuencias, Tm, ubicación exacta y alertas de inespecificidad.</p>
+                 <div className="flex items-center justify-between border-t border-slate-100 pt-4 mt-auto">
+                   <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-full">{stats.oligosCount} Items</span>
+                   <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center group-hover:bg-emerald-600 transition-colors"><ArrowRight size={20}/></span>
+                 </div>
+               </div>
+            </a>
+
+            {/* Anticuerpos */}
+            <a href="inventario_anticuerpos.html" className="bg-white rounded-3xl p-6 border-2 border-transparent hover:border-indigo-400 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group flex flex-col h-full relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-100 rounded-bl-full -mr-8 -mt-8 z-0 transition-transform group-hover:scale-110"></div>
+               <div className="relative z-10 flex flex-col h-full">
+                 <div className="bg-indigo-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-indigo-100">
+                   <Beaker size={32} className="text-indigo-600"/>
+                 </div>
+                 <h3 className="text-2xl font-black text-slate-800 mb-2">Anticuerpos</h3>
+                 <p className="text-sm text-slate-500 mb-6 flex-1">Inventario para Western Blot e IHQ. Control de especificidad, hospedero, diluciones y alertas manuales.</p>
+                 <div className="flex items-center justify-between border-t border-slate-100 pt-4 mt-auto">
+                   <span className="text-xs font-bold text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1 rounded-full">{stats.abCount} Items</span>
+                   <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center group-hover:bg-indigo-600 transition-colors"><ArrowRight size={20}/></span>
+                 </div>
+               </div>
+            </a>
+
+            {/* Reactivos */}
+            <a href="reactivos.html" className="bg-white rounded-3xl p-6 border-2 border-transparent hover:border-cyan-400 hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group flex flex-col h-full relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-100 rounded-bl-full -mr-8 -mt-8 z-0 transition-transform group-hover:scale-110"></div>
+               <div className="relative z-10 flex flex-col h-full">
+                 <div className="bg-cyan-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-cyan-100">
+                   <FlaskConical size={32} className="text-cyan-600"/>
+                 </div>
+                 <h3 className="text-2xl font-black text-slate-800 mb-2">Reactivos Generales</h3>
+                 <p className="text-sm text-slate-500 mb-6 flex-1">Gestión de reactivos, soluciones, kits de extracción y consumibles generales del laboratorio.</p>
+                 <div className="flex items-center justify-between border-t border-slate-100 pt-4 mt-auto">
+                   <span className="text-xs font-bold text-cyan-600 uppercase tracking-widest bg-cyan-50 px-3 py-1 rounded-full">{stats.rxCount} Items</span>
+                   <span className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center group-hover:bg-cyan-600 transition-colors"><ArrowRight size={20}/></span>
+                 </div>
+               </div>
+            </a>
+          </div>
+        </div>
+      );
+
+      const renderScanner = () => (
+        <div className="animate-fade-in max-w-2xl mx-auto text-center py-10">
+           <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-100 relative overflow-hidden">
+              <div className="absolute inset-0 bg-blue-50/50 flex items-center justify-center">
+                 <div className="w-full h-full max-w-md max-h-96 border-4 border-blue-400/30 rounded-3xl relative">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 shadow-[0_0_15px_#3b82f6] animate-[ping_2s_ease-in-out_infinite]"></div>
+                    
+                    <div className="absolute top-4 left-4 w-12 h-12 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
+                    <div className="absolute top-4 right-4 w-12 h-12 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
+                    <div className="absolute bottom-4 left-4 w-12 h-12 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
+                    <div className="absolute bottom-4 right-4 w-12 h-12 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
+                 </div>
+              </div>
               
-              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Módulos Especializados</p>
-              <button onClick={() => setActiveTab('orders')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'orders' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-slate-800'}`}><CreditCard size={20} /> Compras y Pedidos</button>
+              <div className="relative z-10 bg-white/80 backdrop-blur-md p-8 rounded-3xl mt-20 inline-block border border-slate-200">
+                <ScanLine size={64} className="text-blue-600 mx-auto mb-4" />
+                <h2 className="text-2xl font-black text-slate-800 mb-2">Escáner de Códigos</h2>
+                <p className="text-slate-500 text-sm max-w-xs mx-auto mb-6">Apunta la cámara al código de barras o QR de la etiqueta para ver la ficha del producto.</p>
+                
+                <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-all w-full">
+                  Activar Cámara
+                </button>
+              </div>
+           </div>
+        </div>
+      );
 
-              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Inventarios Específicos</p>
-              <a href="inventario_anticuerpos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <TestTubes size={20} /> Inv. Anticuerpos
-              </a>
-              <a href="inventario_oligos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <Dna size={20} /> Inv. Oligos
-              </a>
-              <a href="reactivos.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <FlaskConical size={20} /> Reactivos / Materiales
-              </a>
-              <a href="inventario_de_muestras_y_biobanco.html" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-slate-800 text-slate-300">
-                <LayoutGrid size={20} /> Cajas y Muestras
-              </a>
+      return (
+        <div className="flex h-screen overflow-hidden bg-slate-50">
+          
+          {/* Sidebar Desktop */}
+          <aside className="hidden md:flex flex-col w-72 glass-sidebar text-white transition-all duration-300 shadow-2xl relative z-20">
+            <div className="p-6 flex items-center gap-3 border-b border-white/10">
+              <div className="bg-gradient-to-br from-blue-500 to-cyan-500 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg">
+                <Boxes className="text-white" size={20} />
+              </div>
+              <div>
+                <h1 className="font-black text-xl tracking-tight">LabManager</h1>
+                <span className="text-[10px] uppercase font-bold text-blue-400 tracking-widest">Edición Pro</span>
+              </div>
+            </div>
 
-              <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-6">Auditoría / Calidad</p>
-              <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-slate-700 text-white border border-slate-600' : 'hover:bg-slate-800'}`}><ClipboardSignature size={20} /> Historial Operativo</button>
-              {currentUserData?.role === 'superadmin' && (
-                <>
-                  <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-1 transition-all ${activeTab === 'users' ? 'bg-purple-600 text-white' : 'hover:bg-slate-800'}`}><Users size={20} /> Control Accesos</button>
-                  <button onClick={handleExportCSV} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-1 transition-all hover:bg-emerald-600 hover:text-white text-emerald-400 font-bold"><Download size={20} /> Exportar Excel Completo</button>
-                </>
-              )}
+            <nav className="flex-1 p-4 space-y-2 mt-4 overflow-y-auto no-scrollbar">
+              <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}>
+                <LayoutDashboard size={20}/> Panel Principal
+              </button>
+              
+              <div className="pt-4 pb-2 px-4">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Módulos</p>
+              </div>
+
+              <button onClick={() => setActiveTab('inventory')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}>
+                <FolderOpen size={20}/> Bases de Datos
+              </button>
+              
+              {/* Enlaces directos en el sidebar */}
+              <div className="pl-11 space-y-1 mt-1">
+                 <a href="inventario_oligos.html" className="block py-2 text-sm text-slate-400 hover:text-emerald-400 transition-colors flex items-center gap-2"><Dna size={14}/> Oligos</a>
+                 <a href="inventario_anticuerpos.html" className="block py-2 text-sm text-slate-400 hover:text-indigo-400 transition-colors flex items-center gap-2"><Beaker size={14}/> Anticuerpos</a>
+                 <a href="reactivos.html" className="block py-2 text-sm text-slate-400 hover:text-cyan-400 transition-colors flex items-center gap-2"><FlaskConical size={14}/> Reactivos Generales</a>
+              </div>
+
+              <div className="pt-4 pb-2 px-4">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Herramientas</p>
+              </div>
+
+              <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium ${activeTab === 'scanner' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:bg-white/10 hover:text-white'}`}>
+                <ScanLine size={20}/> Escanear Etiqueta
+              </button>
             </nav>
 
-            <div className="p-4 bg-slate-950">
-              <div className="flex items-center gap-3 mb-3 bg-slate-800 p-3 rounded-xl">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white overflow-hidden">
-                  {currentUserData.photoURL ? <img src={currentUserData.photoURL} /> : currentUserData.name.charAt(0).toUpperCase()}
+            <div className="p-4 border-t border-white/10 bg-slate-900/50">
+              <div className="flex items-center gap-3 mb-4 px-2">
+                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden border-2 border-slate-600">
+                  {user?.photoURL ? <img src={user.photoURL} alt="perfil"/> : <User className="text-slate-400" size={20}/>}
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-white font-bold truncate text-sm">{currentUserData.name}</p>
-                  <p className={`text-[10px] uppercase font-bold tracking-wider ${isAdmin ? 'text-purple-400' : 'text-emerald-400'}`}>{currentUserData.role}</p>
+                  <p className="text-sm font-bold truncate text-white">{user?.name}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{user?.isSuperAdmin ? 'Administrador' : 'Usuario Estandar'}</p>
                 </div>
               </div>
-              <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-bold text-red-400 hover:bg-red-600/20 rounded-lg"><LogOut size={16} /> Salir</button>
+              <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all border border-transparent hover:border-red-500/30">
+                <LogOut size={16}/> Cerrar Sesión
+              </button>
             </div>
           </aside>
 
-          {/* MAIN CONTENT */}
-          <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-            <header className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md z-10">
-              <span className="font-bold flex items-center gap-2"><Boxes size={24} className="text-blue-500" /> LabManager</span>
-              <div className="flex gap-4">
-                <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''}><LayoutDashboard/></button>
-                <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-400' : ''}><Folder/></button>
-                <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''}><ScanLine/></button>
-                <a href="reactivos.html" title="Reactivos" className="text-gray-400 hover:text-blue-400"><FlaskConical size={24}/></a>
-              </div>
-            </header>
-
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 relative">
-              
-              {activeTab === 'dashboard' && (
-                <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
-                  <div>
-                    <h2 className="text-3xl font-extrabold text-gray-900">Hola, {currentUserData.name.split(' ')[0]}</h2>
-                    <p className="text-gray-500 mt-1">Panel General de Laboratorio</p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div onClick={() => setActiveTab('inventory')} className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md">
-                      <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Boxes size={32}/></div>
-                      <div><p className="text-sm text-gray-500 font-bold uppercase">Elementos</p><p className="text-4xl font-black text-gray-800">{inventory.length}</p></div>
-                    </div>
-                    <div onClick={() => setActiveTab('orders')} className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md">
-                      <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><BellRing size={32} className="animate-pulse" /></div>
-                      <div><p className="text-sm text-gray-500 font-bold uppercase">Alertas Manuales</p><p className="text-4xl font-black text-red-600">{alertedItems.length}</p></div>
-                    </div>
-                    <div className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5">
-                      <div className="p-4 bg-orange-50 text-orange-600 rounded-2xl"><Calendar size={32}/></div>
-                      <div><p className="text-sm text-gray-500 font-bold uppercase">Caducan Pronto</p><p className="text-4xl font-black text-orange-600">{expiringItems.length}</p></div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'orders' && (
-                <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="bg-indigo-600 p-3 rounded-xl text-white shadow-lg"><CreditCard size={28}/></div>
-                    <div>
-                      <h2 className="text-3xl font-black text-gray-900">Módulo de Compras y Alertas</h2>
-                      <p className="text-gray-500">Elementos marcados manualmente por los usuarios como críticos o agotados.</p>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 min-h-[500px]">
-                    {alertedItems.length === 0 && inventory.filter(i => i.orderStatus === 'ordered').length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-64 text-gray-400"><CheckCircle2 size={64} className="text-green-400 mb-4"/><p className="text-xl font-bold">Todo está bajo control.</p><p>No hay artículos marcados con alerta manual.</p></div>
-                    ) : (
-                      <div className="space-y-4">
-                        {alertedItems.filter(i => i.orderStatus !== 'ordered').map(item => (
-                          <div key={item.id} className="flex justify-between items-center p-5 bg-red-50 border border-red-100 rounded-2xl">
-                            <div className="flex gap-4 items-center">
-                              <BellRing className="text-red-500 animate-pulse" size={24}/>
-                              <div>
-                                <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                                  {item.name} <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded uppercase font-black">Alerta Activada</span>
-                                </h3>
-                                <p className="text-sm text-gray-600">Stock Reportado: <strong className="text-red-600">{item.qty} {item.stockType === 'jar' ? '%' : item.unit}</strong> | Prov: {item.provider || 'N/A'} | Cat: {item.catalogNum || 'N/A'}</p>
-                              </div>
-                            </div>
-                            {isAdmin && (
-                              <div className="flex gap-2">
-                                {item.purchaseLink && (
-                                  <a href={item.purchaseLink} target="_blank" className="px-4 py-2 bg-white text-indigo-600 font-bold rounded-lg border border-indigo-200 shadow-sm hover:bg-indigo-50 flex items-center gap-2"><ExternalLink size={16}/> Comprar Directo</a>
-                                )}
-                                <button onClick={() => handleSendPurchaseRequest(item)} className="px-4 py-2 bg-white text-gray-700 font-bold rounded-lg border shadow-sm hover:bg-gray-50 flex items-center gap-2"><Mail size={16}/> Cotizar</button>
-                                <button onClick={() => handleOrderStatusChange(item, 'ordered')} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg shadow-sm hover:bg-indigo-700 flex items-center gap-2"><Truck size={16}/> Marcar Pedido</button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-
-                        {inventory.filter(i => i.orderStatus === 'ordered').map(item => (
-                          <div key={item.id} className="flex justify-between items-center p-5 bg-indigo-50 border border-indigo-100 rounded-2xl opacity-80 hover:opacity-100 transition-opacity">
-                            <div className="flex gap-4 items-center">
-                              <div className="p-2 bg-indigo-200 text-indigo-700 rounded-full animate-bounce"><Truck size={20}/></div>
-                              <div>
-                                <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2">{item.name} <span className="bg-indigo-600 text-white text-[10px] px-2 py-0.5 rounded uppercase tracking-wider">Pedido Enviado</span></h3>
-                                <p className="text-sm text-gray-600">Esperando recepción (Stock actual: {item.qty} {item.stockType === 'jar' ? '%' : item.unit})</p>
-                              </div>
-                            </div>
-                            {isAdmin && (
-                              <div className="flex gap-2">
-                                <button onClick={() => handleOrderStatusChange(item, 'pending')} className="px-4 py-2 text-gray-500 hover:text-red-500 font-bold rounded-lg"><X size={20}/></button>
-                                <button onClick={() => handleOrderStatusChange(item, 'received')} className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg shadow-sm hover:bg-green-500 flex items-center gap-2"><CheckSquare size={16}/> ¡Recibido! (Sumar Stock)</button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'inventory' && !showItemForm && !selectedFolder && (
-                <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-                  <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Catálogo de Inventario</h2>
-                    <div className="flex gap-3">
-                      {isAdmin && (
-                        <button onClick={handlePrintAllLabels} className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
-                          <Printer size={18}/> 🖨️ Imprimir Etiquetas
-                        </button>
-                      )}
-                      {currentUserData?.role === 'superadmin' && (
-                        <button onClick={handleExportCSV} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md transition-transform hover:-translate-y-1">
-                          <Download size={18}/> 📊 Descargar Excel
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {CATEGORIES.map(folder => {
-                       const items = inventory.filter(i => i.category === folder.name);
-                       const alerts = items.filter(i => i.manualAlert).length;
-                       return (
-                        <div key={folder.id} onClick={() => setSelectedFolder(folder.name)} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200 cursor-pointer hover:shadow-xl hover:border-blue-400 transition-all group relative overflow-hidden">
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-transparent to-gray-50 rounded-bl-full -z-10 group-hover:to-blue-50 transition-colors"></div>
-                          <div className="flex justify-between items-start mb-6">
-                            <div className={`p-5 rounded-2xl text-4xl inline-block shadow-sm ${folder.color} group-hover:scale-110 transition-transform`}>{folder.icon}</div>
-                            {alerts > 0 && <span className="bg-red-100 text-red-700 text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm"><Bell size={14}/> {alerts} alertas</span>}
-                          </div>
-                          <h3 className="text-xl font-bold text-gray-800 mb-1">{folder.name}</h3>
-                          <p className="text-gray-500 font-medium">{items.length} productos</p>
-                        </div>
-                       )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'inventory' && !showItemForm && selectedFolder && (
-                 <div className="space-y-4 animate-fade-in max-w-7xl mx-auto flex flex-col h-full">
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-2">
-                      <h2 className="text-3xl font-extrabold text-gray-900 flex items-center gap-3">
-                        <button onClick={()=>setSelectedFolder(null)} className="hover:bg-gray-200 p-2 rounded-full transition-colors"><ArrowLeft size={24}/></button> 
-                        {selectedFolder}
-                      </h2>
-                      <div className="flex items-center gap-3">
-                        <div className="flex bg-white rounded-xl border p-1 shadow-sm">
-                          <button onClick={()=>setViewMode('table')} className={`p-2 rounded-lg ${viewMode==='table' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`} title="Vista de Lista"><List size={20}/></button>
-                          <button onClick={()=>setViewMode('grid')} className={`p-2 rounded-lg ${viewMode==='grid' ? 'bg-blue-100 text-blue-700' : 'text-gray-400 hover:text-gray-600'}`} title="Vista Galería"><LayoutGrid size={20}/></button>
-                        </div>
-                        {isAdmin && (
-                          <button onClick={()=>{setEditingItem(null); setGeneratedQR(''); setShowItemForm(true);}} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-lg transition-transform hover:-translate-y-1">
-                            <Plus size={20}/> Registrar Nuevo
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-3 mb-2 flex items-center gap-2">
-                       <Search className="text-gray-400 ml-2" size={20} />
-                       <input type="text" placeholder="Buscar por nombre, ID, lote, catálogo o marca..." className="w-full bg-transparent border-none focus:outline-none text-gray-700 font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                    </div>
-
-                    {/* VISTA DE GRID */}
-                    {viewMode === 'grid' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-20">
-                        {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || i.lotNum?.includes(searchQuery) || i.catalogNum?.includes(searchQuery))).map(item => {
-                          const displayImg = item.imageUrls?.[0] || item.imageUrl;
-                          const isLow = item.qty <= (item.minThreshold || 1) && item.enableLowStockAlert !== false;
-                          
-                          return (
-                            <div key={item.id} className={`bg-white rounded-2xl border-2 ${item.manualAlert ? 'border-red-300 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border-transparent shadow-sm'} overflow-hidden hover:shadow-xl hover:border-blue-300 transition-all flex flex-col relative`}>
-                              <div className="absolute top-2 left-2 flex gap-1 z-10">
-                                {item.sealStatus === 'in_use' ? (
-                                   <span className="bg-amber-100/90 text-amber-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-amber-200 flex items-center gap-1"><PackageOpen size={10}/> En Uso</span>
-                                ) : (
-                                   <span className="bg-emerald-100/90 text-emerald-700 text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm backdrop-blur border border-emerald-200 flex items-center gap-1"><Package size={10}/> Sellado</span>
-                                )}
-                              </div>
-                              {item.manualAlert && <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-md flex items-center gap-1 z-10 animate-pulse"><Bell size={10}/> Alerta</span>}
-
-                              <div className="h-40 bg-gray-100 relative cursor-pointer" onClick={() => setViewingItem(item)}>
-                                {displayImg ? <img src={displayImg} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon size={48}/></div>}
-                                {isLow && <span className="absolute bottom-2 right-2 bg-red-500 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-md">¡Reponer!</span>}
-                              </div>
-                              <div className="p-4 flex-1 flex flex-col">
-                                <h3 className="font-bold text-gray-900 text-lg mb-1 line-clamp-2 cursor-pointer hover:text-blue-600" onClick={() => setViewingItem(item)}>{item.name}</h3>
-                                <p className="text-xs text-gray-500 font-mono mb-1"><QrCode size={12} className="inline mr-1"/>{item.barcode}</p>
-                                <p className="text-xs text-gray-500 mb-3">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
-                                <div className="mt-auto pt-3 border-t border-gray-100 flex justify-between items-end">
-                                  <div className="w-full">
-                                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Stock Físico</p>
-                                    <p className="text-2xl font-black text-gray-800">{item.qty} <span className="text-sm font-medium text-gray-500">{item.stockType === 'jar' ? '%' : item.unit}</span></p>
-                                  </div>
-                                  <div className="flex gap-1 flex-shrink-0">
-                                    <button onClick={(e) => { e.stopPropagation(); setConsumeItem(item); }} className="p-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100" title="Descontar Uso"><MinusCircle size={18}/></button>
-                                    <button onClick={()=>setViewingItem(item)} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100" title="Ver Detalles"><Info size={18}/></button>
-                                    <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Auditar"><ScanLine size={18}/></button>
-                                    {isAdmin && <button onClick={() => setReassignItem(item)} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-200" title="Reubicar de Categoría"><ArrowRightLeft size={18}/></button>}
-                                    {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode||''); setShowItemForm(true);}} className="p-2 bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-200"><Settings size={18}/></button>}
-                                    {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
-                                      <button onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id, item.name); }} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-200" title="Eliminar Base de Datos"><Trash2 size={18}/></button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {/* VISTA DE TABLA */}
-                    {viewMode === 'table' && (
-                       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-x-auto pb-20">
-                         <table className="w-full text-left whitespace-nowrap">
-                           <thead className="bg-gray-50/80 sticky top-0 border-b border-gray-200 z-10">
-                             <tr><th className="p-4 text-xs uppercase font-bold text-gray-500">Producto</th><th className="p-4 text-xs uppercase font-bold text-gray-500">Detalles</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-center">Estado</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-right">Stock</th><th className="p-4 text-xs uppercase font-bold text-gray-500 text-center">Acciones</th></tr>
-                           </thead>
-                           <tbody className="divide-y divide-gray-100">
-                             {inventory.filter(i => i.category === selectedFolder && (i.name.toLowerCase().includes(searchQuery.toLowerCase()) || i.barcode.includes(searchQuery) || i.lotNum?.includes(searchQuery) || i.catalogNum?.includes(searchQuery))).map(item => {
-                               const displayImg = item.imageUrls?.[0] || item.imageUrl;
-                               const isLow = item.qty <= (item.minThreshold || 1) && item.enableLowStockAlert !== false;
-                               return (
-                                 <tr key={item.id} className={`hover:bg-blue-50/30 ${item.manualAlert ? 'bg-red-50/20' : ''}`}>
-                                   <td className="p-4 flex items-center gap-4 min-w-[250px] cursor-pointer" onClick={()=>setViewingItem(item)}>
-                                     <div className="w-12 h-12 rounded bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 relative">
-                                       {displayImg ? <img src={displayImg} className="w-full h-full object-cover"/> : <ImageIcon className="text-gray-400" size={20}/>}
-                                       {isLow && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full m-1"></div>}
-                                     </div>
-                                     <div>
-                                       <p className="font-bold text-gray-900 flex items-center gap-2">
-                                         {item.name} 
-                                         {item.manualAlert && <Bell size={14} className="text-red-500"/>}
-                                       </p>
-                                       <p className="text-xs text-gray-500 font-mono"><QrCode size={12} className="inline mr-1"/>{item.barcode}</p>
-                                     </div>
-                                   </td>
-                                   <td className="p-4 text-xs text-gray-600">
-                                     <p className="mt-1">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
-                                     {item.expirationDate && <p className="text-orange-600 mt-1 flex items-center gap-1 font-bold"><Calendar size={12}/> Vence: {item.expirationDate}</p>}
-                                   </td>
-                                   <td className="p-4 text-center">
-                                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${item.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                        {item.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}
-                                      </span>
-                                   </td>
-                                   <td className="p-4 text-right">
-                                     <span className={`font-black text-xl ${isLow ? 'text-red-600' : 'text-gray-800'}`}>{item.qty} <span className="text-sm font-medium text-gray-500">{item.stockType === 'jar' ? '%' : item.unit}</span></span>
-                                   </td>
-                                   <td className="p-4">
-                                      <div className="flex justify-center gap-2">
-                                        <button onClick={(e) => { e.stopPropagation(); setConsumeItem(item); }} className="text-orange-600 bg-orange-50 p-2.5 rounded-lg hover:bg-orange-100" title="Descontar Uso"><MinusCircle size={18}/></button>
-                                        <button onClick={()=>setViewingItem(item)} className="text-emerald-600 bg-emerald-50 p-2.5 rounded-lg hover:bg-emerald-100" title="Ver Detalles"><Info size={18}/></button>
-                                        <button onClick={()=>handlePrintLabel(item)} className="text-purple-600 bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100" title="Imprimir"><Printer size={18}/></button>
-                                        <button onClick={()=>{setScanInput(item.barcode); setActiveTab('scanner'); setTimeout(()=>handleBarcodeSubmit(),50)}} className="text-blue-600 bg-blue-50 p-2.5 rounded-lg hover:bg-blue-100" title="Auditar"><ScanLine size={18}/></button>
-                                        {isAdmin && <button onClick={() => setReassignItem(item)} className="text-purple-600 bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100" title="Reubicar de Categoría"><ArrowRightLeft size={18} /></button>}
-                                        {isAdmin && <button onClick={()=>{setEditingItem(item); setGeneratedQR(item.barcode || ''); setShowItemForm(true);}} className="text-gray-600 bg-gray-100 p-2.5 rounded-lg hover:bg-gray-200" title="Editar"><Settings size={18} /></button>}
-                                        {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
-                                          <button onClick={(e)=> { e.stopPropagation(); handleDeleteItem(item.id, item.name); }} className="text-red-600 bg-red-50 p-2.5 rounded-lg hover:bg-red-100" title="Eliminar Base de Datos"><Trash2 size={18} /></button>
-                                        )}
-                                      </div>
-                                   </td>
-                                 </tr>
-                               )
-                             })}
-                           </tbody>
-                         </table>
-                       </div>
-                    )}
-
-                    {/* === MODAL DE DETALLES DEL ITEM === */}
-                    {viewingItem && (
-                      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 animate-fade-in overflow-y-auto">
-                        <div className="bg-white rounded-3xl max-w-4xl w-full p-8 relative shadow-2xl my-auto">
-                          <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors z-20"><X size={24}/></button>
-                          
-                          {viewingItem.manualAlert && (
-                            <div className="bg-red-500 text-white p-3 -mx-8 -mt-8 mb-6 rounded-t-3xl flex items-center justify-center gap-2 font-black uppercase tracking-wider text-sm shadow-md">
-                              <AlertTriangle size={18} className="animate-pulse" /> ALERTA DE STOCK / INCIDENCIA REPORTADA
-                            </div>
-                          )}
-                          
-                          <div className="flex flex-col md:flex-row gap-8 mb-6">
-                            
-                            <div className="w-full md:w-1/3 flex flex-col gap-3">
-                               <div className="w-full aspect-square bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
-                                 {(viewingItem.imageUrls && viewingItem.imageUrls.length > 0) || viewingItem.imageUrl ? (
-                                   <img src={viewingItem.imageUrls ? viewingItem.imageUrls[0] : viewingItem.imageUrl} className="w-full h-full object-cover"/> 
-                                 ) : <ImageIcon size={64} className="text-gray-300"/>}
-                               </div>
-                               {viewingItem.imageUrls && viewingItem.imageUrls.length > 1 && (
-                                  <div className="grid grid-cols-3 gap-2">
-                                     {viewingItem.imageUrls.slice(1).map((imgUrl, i) => (
-                                       <div key={i} className="aspect-square bg-gray-100 rounded-lg overflow-hidden border">
-                                          <img src={imgUrl} className="w-full h-full object-cover opacity-80 hover:opacity-100 cursor-zoom-in" onClick={() => window.open(imgUrl, '_blank')}/>
-                                       </div>
-                                     ))}
-                                  </div>
-                               )}
-                            </div>
-
-                            <div className="flex-1">
-                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                                <div>
-                                  <h2 className="text-3xl font-black text-gray-900 mb-2">{viewingItem.name}</h2>
-                                  <p className="text-sm text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg inline-block border"><QrCode size={14} className="inline mr-2"/>{viewingItem.barcode}</p>
-                                </div>
-
-                                {isAdmin && (
-                                  <div className="flex flex-col gap-2 shrink-0">
-                                    <button 
-                                      onClick={() => setConsumeItem(viewingItem)}
-                                      className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"
-                                    >
-                                      <MinusCircle size={16}/> Descontar
-                                    </button>
-
-                                    <button 
-                                      onClick={() => toggleSealStatus(viewingItem.id, viewingItem.sealStatus)}
-                                      className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200'}`}
-                                    >
-                                      {viewingItem.sealStatus === 'in_use' ? <PackageOpen size={16}/> : <Package size={16}/>}
-                                      {viewingItem.sealStatus === 'in_use' ? 'Marcar Sellado' : 'Marcar en Uso'}
-                                    </button>
-                                    
-                                    <button 
-                                      onClick={() => toggleManualAlert(viewingItem.id, viewingItem.manualAlert)}
-                                      className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.manualAlert ? 'bg-red-600 text-white hover:bg-red-700 border-red-700 shadow-md' : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}
-                                    >
-                                      <Bell size={16} className={viewingItem.manualAlert ? 'animate-pulse' : ''}/>
-                                      {viewingItem.manualAlert ? 'Desactivar Alerta' : 'Activar Alerta'}
-                                    </button>
-
-                                    {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
-                                      <button 
-                                        onClick={() => { handleDeleteItem(viewingItem.id, viewingItem.name); setViewingItem(null); }}
-                                        className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center gap-2 transition-all mt-2"
-                                      >
-                                        <Trash2 size={16}/> Eliminar Elemento
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                              
-                              <div className="mt-6 grid grid-cols-2 gap-4">
-                                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                                  <p className="text-xs uppercase font-bold text-blue-500 mb-1">Stock Físico Actual</p>
-                                  <p className="text-3xl font-black text-blue-900">{viewingItem.qty} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
-                                </div>
-                                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <p className="text-xs uppercase font-bold text-gray-500">Stock Mínimo Sugerido</p>
-                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${viewingItem.enableLowStockAlert !== false ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-gray-400'}`}>{viewingItem.enableLowStockAlert !== false ? 'Alerta Activa' : 'Alerta Apagada'}</span>
-                                  </div>
-                                  <p className="text-3xl font-black text-gray-700">{viewingItem.minThreshold || 1} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {viewingItem.characteristics && (
-                            <div className="mb-6">
-                               <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Info size={16}/> Características del Elemento</p>
-                               <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 text-indigo-900 font-medium text-sm leading-relaxed">
-                                 {viewingItem.characteristics}
-                               </div>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-6">
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Categoría</p><p className="font-medium text-gray-900">{viewingItem.category}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Ubicación</p><p className="font-medium text-gray-900">{viewingItem.location}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Proveedor</p><p className="font-medium text-gray-900">{viewingItem.provider || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Marca</p><p className="font-medium text-gray-900">{viewingItem.brand || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Catálogo</p><p className="font-medium text-gray-900">{viewingItem.catalogNum || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Lote</p><p className="font-medium text-gray-900">{viewingItem.lotNum || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Caducidad</p><p className={`font-medium ${viewingItem.expirationDate && new Date(viewingItem.expirationDate) < new Date() ? 'text-red-600 font-bold' : 'text-gray-900'}`}>{viewingItem.expirationDate || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Estado Pedido</p><p className="font-medium text-gray-900 uppercase">{viewingItem.orderStatus === 'ordered' ? '📦 En Camino' : (viewingItem.orderStatus === 'received' ? '✅ Recibido' : 'Normal')}</p></div>
-                          </div>
-
-                          {viewingItem.observations && (
-                            <div className="mt-6 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-                              <p className="text-xs font-bold text-yellow-700 uppercase mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones / Seguridad</p>
-                              <p className="text-sm text-yellow-900">{viewingItem.observations}</p>
-                            </div>
-                          )}
-
-                          {viewingItem.purchaseLink && (
-                            <div className="mt-6 pt-6 border-t border-gray-100 text-center">
-                              <a href={viewingItem.purchaseLink} target="_blank" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors">
-                                <ExternalLink size={18}/> Ver Enlace de Compra
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
+          {/* Main Content Area */}
+          <main className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
+            
+            {/* Topbar Desktop & Mobile Header */}
+            <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between z-10">
+               {/* Mobile Logo & Menu Toggle */}
+               <div className="md:hidden flex items-center gap-3">
+                 <div className="bg-blue-600 w-8 h-8 rounded-lg flex items-center justify-center shadow-md">
+                   <Boxes className="text-white" size={16} />
                  </div>
-              )}
+                 <span className="font-black text-lg text-slate-800">LabManager</span>
+               </div>
 
-              {/* === MODAL DE REASIGNACIÓN DE CATEGORÍA === */}
-              {reassignItem && isAdmin && (
-                 <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 animate-fade-in overflow-y-auto">
-                   <div className="bg-white rounded-3xl max-w-md w-full p-8 relative shadow-2xl my-auto border-2 border-purple-200">
-                      <button onClick={() => setReassignItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"><X size={20}/></button>
-                      <h3 className="text-2xl font-black text-gray-900 mb-2 flex items-center gap-2"><ArrowRightLeft className="text-purple-600"/> Reubicar Elemento</h3>
-                      <p className="text-gray-500 text-sm mb-6">Mueve <strong>{reassignItem.name}</strong> a otra categoría del inventario si fue clasificado incorrectamente.</p>
+               {/* Desktop Page Title (Hidden on Mobile) */}
+               <div className="hidden md:block">
+                  <h2 className="text-xl font-black text-slate-800 capitalize">
+                    {activeTab === 'dashboard' ? 'Panel Principal' : activeTab === 'inventory' ? 'Inventarios' : 'Escáner QR'}
+                  </h2>
+               </div>
 
-                      <form onSubmit={handleReassignSubmit} className="space-y-5">
-                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                           <p className="text-xs uppercase font-bold text-gray-500 mb-1">Categoría Actual</p>
-                           <p className="font-medium text-gray-800">{reassignItem.category}</p>
-                         </div>
-
-                         <div>
-                           <label className="block text-xs font-bold text-purple-600 uppercase mb-2">Nueva Categoría Destino *</label>
-                           <select name="newCategory" defaultValue={reassignItem.category} className="w-full p-3.5 border border-purple-200 rounded-xl font-medium outline-none focus:ring-2 focus:ring-purple-500 bg-white">
-                              {CATEGORIES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                           </select>
-                         </div>
-
-                         <div className="flex gap-3 pt-4">
-                           <button type="button" onClick={() => setReassignItem(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
-                           <button type="submit" className="flex-1 py-3 bg-purple-600 text-white font-bold rounded-xl hover:bg-purple-700 shadow-md shadow-purple-500/20 transition-all">Mover Elemento</button>
-                         </div>
-                      </form>
-                   </div>
-                 </div>
-              )}
-
-              {/* === FORMULARIO REGISTRO === */}
-              {activeTab === 'inventory' && showItemForm && (
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 max-w-4xl mx-auto shadow-2xl animate-fade-in relative overflow-hidden pb-20">
-                  <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-500"></div>
-                  
-                  <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-6">
-                    <div>
-                      <h2 className="text-2xl font-black text-gray-900 flex items-center gap-3">
-                        {editingItem ? <Settings className="text-blue-500" size={28}/> : <Plus className="text-green-500" size={28}/>} 
-                        {editingItem ? 'Editar Ficha del Producto' : 'Registro de Nueva Ficha de Material'}
-                      </h2>
-                    </div>
-                    <button onClick={()=>{setShowItemForm(false); setImagePreviews([]); setEditingItem(null);}} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X size={24} className="text-gray-400"/></button>
-                  </div>
-
-                  <form onSubmit={handleSaveItem} className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                    
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Nombre del Producto / Reactivo *</label>
-                      <input name="name" defaultValue={editingItem?.name} required className="w-full p-4 border border-gray-300 rounded-xl font-bold text-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" />
-                    </div>
-
-                    {/* IMAGEN DEL PRODUCTO (MULTIPLE) */}
-                    <div className="col-span-1 md:col-span-2 bg-slate-50 p-6 rounded-2xl border border-gray-200 shadow-inner">
-                      <div className="flex justify-between items-center mb-4">
-                         <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><ImageIcon size={18}/> Fotografías (Máx 4)</label>
-                         <span className="text-xs font-bold bg-white px-2 py-1 rounded border text-gray-500">{imagePreviews.length} / 4 subidas</span>
-                      </div>
-                      
-                      <div className="flex flex-col sm:flex-row items-start gap-6">
-                         <div className="flex gap-2 flex-wrap">
-                           {imagePreviews.map((preview, index) => (
-                             <div key={index} className="w-24 h-24 rounded-xl bg-white border-2 border-gray-300 overflow-hidden shrink-0 shadow-sm relative group">
-                               <img src={preview} className="w-full h-full object-cover" />
-                               <button type="button" onClick={() => removeImagePreview(index)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"><X size={12}/></button>
-                             </div>
-                           ))}
-                           
-                           {imagePreviews.length < 4 && (
-                             <div className="w-24 h-24 rounded-xl bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center shrink-0">
-                               <ImageIcon className="text-gray-300" size={30}/>
-                             </div>
-                           )}
-                         </div>
-
-                         <div className="flex-1 flex flex-col sm:flex-row gap-3 w-full mt-auto">
-                            <label className={`flex-1 border border-gray-300 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50 text-gray-700 cursor-pointer'}`}>
-                              <Upload size={18}/> {imagePreviews.length > 0 ? 'Añadir Más' : 'Subir Archivo'}
-                              <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} disabled={imagePreviews.length >= 4} />
-                            </label>
-                            <label className={`flex-1 font-bold py-3 px-4 rounded-xl text-center transition-colors shadow-sm text-sm flex justify-center items-center gap-2 ${imagePreviews.length >= 4 ? 'bg-slate-400 text-slate-200 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-900 text-white cursor-pointer'}`}>
-                              <Camera size={18}/> Tomar Foto
-                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleImageUpload(e)} disabled={imagePreviews.length >= 4} />
-                            </label>
-                         </div>
-                      </div>
-                    </div>
-                    
-                    {/* ID UNIQUE */}
-                    <div className="col-span-1 md:col-span-2 bg-slate-900 p-6 rounded-2xl border border-slate-700 shadow-inner mt-2">
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2"><QrCode size={18} className="text-blue-400"/> Identificación LAB ID *</h3>
-                      <div className="flex flex-wrap gap-3">
-                        <input name="barcode" value={generatedQR} onChange={(e) => setGeneratedQR(e.target.value)} required placeholder="Escanea código original o genera uno..." className="flex-1 min-w-[200px] p-3.5 rounded-xl font-mono text-base outline-none" />
-                        <button type="button" onClick={() => setCameraActiveForm(!cameraActiveForm)} className="bg-slate-700 text-white font-bold px-4 py-3 rounded-xl hover:bg-slate-600 transition-colors"><Camera size={20}/></button>
-                        <button type="button" onClick={generateUniqueQR} className="bg-blue-600 text-white font-bold px-4 py-3 rounded-xl hover:bg-blue-500 transition-colors flex items-center gap-2"><QrCode size={18}/> Generar</button>
-                      </div>
-                      {cameraActiveForm && (
-                        <div className="w-full max-w-sm mx-auto mt-4"><div id="qr-reader-form" className="rounded-xl overflow-hidden border-2 border-slate-500"></div></div>
-                      )}
-                    </div>
-
-                    <div className="space-y-6 mt-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Categoría *</label>
-                        <select name="category" defaultValue={editingItem?.category || selectedFolder} className="w-full p-3.5 border border-gray-300 rounded-xl font-medium outline-none">{CATEGORIES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Ubicación Física *</label>
-                        <input name="location" defaultValue={editingItem?.location} required placeholder="Ej. Estante A, Refri -20°C" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-6 mt-4">
-                      <div className="grid grid-cols-2 gap-4">
-                         <div>
-                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Proveedor</label>
-                           <input name="provider" defaultValue={editingItem?.provider} placeholder="Ej. Thermo Fisher" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
-                         </div>
-                         <div>
-                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Marca</label>
-                           <input name="brand" defaultValue={editingItem?.brand} placeholder="Ej. Invitrogen" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
-                         </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                         <div>
-                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nº de Catálogo</label>
-                           <input name="catalogNum" defaultValue={editingItem?.catalogNum} placeholder="Ej. REF 12345" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
-                         </div>
-                         <div>
-                           <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nº de Lote</label>
-                           <input name="lotNum" defaultValue={editingItem?.lotNum} placeholder="Ej. LOT 987X" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
-                         </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-orange-600 uppercase mb-2 flex items-center gap-1"><Calendar size={14}/> Fecha de Caducidad</label>
-                        <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3.5 border border-orange-300 bg-orange-50/30 rounded-xl outline-none" />
-                      </div>
-                    </div>
-
-                    {/* Características */}
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Características del Elemento</label>
-                      <textarea name="characteristics" defaultValue={editingItem?.characteristics} placeholder="Describe las características técnicas, uso recomendado, precauciones..." rows="2" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none"></textarea>
-                    </div>
-
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Observaciones / Notas de Seguridad</label>
-                      <textarea name="observations" defaultValue={editingItem?.observations} placeholder="Condiciones especiales, notas de almacenamiento, sensibilidad, etc." rows="3" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none"></textarea>
-                    </div>
-
-                    {/* --- Stock Engine Mejorado con Cambio Automático y Stock Minimo --- */}
-                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-4 gap-4 pt-6 border-t border-gray-100">
-                      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Tipo de Stock</label>
-                        <select name="stockType" value={formStockType} onChange={(e) => setFormStockType(e.target.value)} className="w-full p-3 border border-gray-300 rounded-xl font-bold text-base text-center outline-none bg-white">
-                          <option value="unit">Unidades (Cerradas)</option>
-                          <option value="jar">Frascos (Estimado %)</option>
-                        </select>
-                      </div>
-                      <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200">
-                        <label className="block text-xs font-bold text-blue-700 uppercase mb-2 text-center">Stock Actual *</label>
-                        <input type="number" name="qty" defaultValue={editingItem?.qty || 0} max={formStockType === 'jar' ? "100" : ""} required className="w-full p-2 border border-blue-300 rounded-xl font-black text-2xl text-center outline-none" />
-                      </div>
-                      <div className="bg-red-50 p-4 rounded-2xl border border-red-200 flex flex-col justify-center">
-                        <label className="block text-xs font-bold text-red-700 uppercase mb-2 text-center flex items-center justify-center gap-1"><AlertTriangle size={14}/> Stock Mínimo *</label>
-                        <input type="number" name="minThreshold" defaultValue={editingItem?.minThreshold || 1} required className="w-full p-2 border border-red-300 rounded-xl font-black text-xl text-center text-red-700 outline-none bg-white" />
-                        <div className="mt-2 flex items-center justify-center gap-2">
-                           <input type="checkbox" id="alertToggle" checked={formEnableAlert} onChange={(e) => setFormEnableAlert(e.target.checked)} className="w-4 h-4 cursor-pointer" />
-                           <label htmlFor="alertToggle" className="text-[10px] font-bold text-red-800 cursor-pointer uppercase">Habilitar Alerta</label>
-                        </div>
-                      </div>
-                      <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Unidad *</label>
-                        <input name="unit" defaultValue={formStockType === 'jar' ? '%' : (editingItem?.unit || 'uds')} readOnly={formStockType === 'jar'} required placeholder="Ej. ml" className={`w-full p-3 border border-gray-300 rounded-xl font-bold text-lg text-center outline-none ${formStockType === 'jar' ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-white'}`} />
-                      </div>
-                    </div>
-                    
-                    {/* Link de Compra Directo */}
-                    <div className="col-span-1 md:col-span-2">
-                       <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Enlace Directo de Compra (URL)</label>
-                       <input name="purchaseLink" defaultValue={editingItem?.purchaseLink} placeholder="https://tienda-proveedor.com/producto..." className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
-                    </div>
-
-                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 col-span-1 sm:col-span-2">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2 text-center">Estado Inicial del Contenedor</label>
-                        <div className="flex gap-2 bg-white p-1 rounded-xl border border-gray-300">
-                           <button type="button" onClick={() => setFormSealStatus('sealed')} className={`flex-1 py-2 text-xs font-black uppercase rounded-lg transition-colors ${formSealStatus === 'sealed' ? 'bg-emerald-100 text-emerald-700' : 'text-gray-400 hover:bg-gray-100'}`}>Sellado</button>
-                           <button type="button" onClick={() => setFormSealStatus('in_use')} className={`flex-1 py-2 text-xs font-black uppercase rounded-lg transition-colors ${formSealStatus === 'in_use' ? 'bg-amber-100 text-amber-700' : 'text-gray-400 hover:bg-gray-100'}`}>En Uso</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="col-span-1 md:col-span-2 pt-6">
-                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-xl text-lg shadow-lg">Guardar Ficha en Base de Datos</button>
-                    </div>
-                  </form>
-                </div>
-            )}
-
-            {/* === MODAL DE CONSUMO (DESCONTAR) === */}
-            {consumeItem && (
-               <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md animate-fade-in overflow-hidden border border-orange-100">
-                    <div className="bg-orange-600 p-6 text-white text-center">
-                      <MinusCircle className="mx-auto mb-2 opacity-80" size={40}/>
-                      <h2 className="text-2xl font-black">Registrar Uso / Descontar</h2>
-                      <p className="text-orange-100 font-medium">{consumeItem.name}</p>
-                    </div>
-                    <form onSubmit={handleConsumeSubmit} className="p-6 space-y-5">
-                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center flex justify-between items-center">
-                        <span className="text-sm font-bold text-gray-500 uppercase">Stock Físico Actual:</span>
-                        <span className="text-2xl font-black text-orange-700">{consumeItem.qty} <span className="text-sm">{consumeItem.stockType === 'jar' ? '%' : consumeItem.unit}</span></span>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Cantidad a Descontar *</label>
-                        <input type="number" step="0.01" min="0.01" name="amount" required max={consumeItem.qty} className="w-full p-4 border border-slate-200 rounded-xl text-center text-xl font-bold focus:border-orange-500 focus:ring-2 ring-orange-200 outline-none" placeholder="0.0" />
-                      </div>
-                      
-                      <div>
-                         <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Proyecto, Persona o Motivo *</label>
-                         <textarea name="reason" required rows="2" className="w-full p-3 border border-slate-200 rounded-xl focus:border-orange-500 outline-none resize-none" placeholder="Ej. Preparación de solución, limpieza, experimento..."></textarea>
-                      </div>
-
-                      <div className="flex gap-3 pt-4">
-                        <button type="button" onClick={() => setConsumeItem(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
-                        <button type="submit" className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 shadow-md shadow-orange-500/20 transition-all">Confirmar Descuento</button>
-                      </div>
-                    </form>
+               {/* User Actions */}
+               <div className="flex items-center gap-4">
+                  <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all relative">
+                    <Bell size={20}/>
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                  </button>
+                  {/* Avatar Solo Mobile */}
+                  <div className="md:hidden w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-slate-300 flex items-center justify-center cursor-pointer" onClick={handleLogout}>
+                     {user?.photoURL ? <img src={user.photoURL} alt="perfil"/> : <User className="text-slate-500" size={16}/>}
                   </div>
                </div>
-            )}
+            </header>
 
-            {/* === MÓDULO AUDITORÍA === */}
-            {activeTab === 'scanner' && (
-              <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-10">
-                <div className="text-center mb-10">
-                  <h2 className="text-4xl font-black text-gray-900">Terminal Segura de Auditoría</h2>
-                  <p className="text-gray-500 mt-2 font-medium">Registra el consumo de forma estricta y auditable. Puedes usar tu lector USB y cámara al mismo tiempo.</p>
-                </div>
+            {/* Content Scrollable Area */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50/50 relative">
+               
+               {/* Decoración de fondo */}
+               <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-blue-50/50 to-transparent pointer-events-none -z-10"></div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  {/* PANEL IZQUIERDO: LECTURA SIMULTÁNEA */}
-                  <div className="lg:col-span-5 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col items-center h-fit">
-                    <div className="w-full space-y-8">
-                      
-                      <div className="space-y-4">
-                        <label className="text-sm font-bold text-gray-700 uppercase tracking-wider flex items-center gap-2"><Camera size={18} className="text-blue-600" /> Cámara del dispositivo</label>
-                        {!cameraActive ? (
-                          <button onClick={() => setCameraActive(true)} className="w-full py-6 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold flex flex-col items-center justify-center gap-2 shadow-lg transition-transform hover:scale-[1.02]">
-                            <Camera size={36} className="text-blue-400" /> Activar Lector Óptico
-                          </button>
-                        ) : (
-                          <div className="space-y-4 animate-fade-in">
-                            <div id="qr-reader" className="shadow-inner bg-black rounded-2xl border-4 border-slate-800"></div>
-                            <button onClick={() => setCameraActive(false)} className="w-full py-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl font-bold flex justify-center gap-2 transition-colors"><X size={20} /> Detener Cámara</button>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="relative flex items-center py-2"><div className="flex-grow border-t border-gray-200"></div><span className="flex-shrink-0 mx-4 text-blue-600 font-black text-sm uppercase tracking-widest">+ Y/Ó AL MISMO TIEMPO +</span><div className="flex-grow border-t border-gray-200"></div></div>
-                      
-                      <form onSubmit={handleBarcodeSubmit} className="relative bg-blue-50 p-5 rounded-2xl border-2 border-blue-200 shadow-inner">
-                        <label className="text-sm font-black text-blue-800 uppercase tracking-wider flex items-center gap-2 mb-4"><Keyboard size={18} /> Pistola / Escáner USB</label>
-                        <div className="relative">
-                          <ScanLine className="absolute left-4 top-1/2 transform -translate-y-1/2 text-blue-600" size={24} />
-                          <input ref={scannerInputRef} type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="Dispara el lector aquí..." className="w-full pl-14 pr-4 py-5 bg-white border-2 border-blue-300 rounded-xl focus:border-blue-600 outline-none font-mono text-base shadow-sm" autoFocus />
-                        </div>
-                        <button type="submit" className="hidden"></button>
-                      </form>
+               <div className="max-w-7xl mx-auto pb-24 md:pb-10">
+                 {activeTab === 'dashboard' && renderDashboard()}
+                 {activeTab === 'inventory' && renderInventory()}
+                 {activeTab === 'scanner' && renderScanner()}
+               </div>
+            </div>
+          </main>
 
-                    </div>
-                  </div>
+          {/* Bottom Navigation Mobile */}
+          <nav className="md:hidden fixed bottom-0 left-0 w-full bg-white/90 backdrop-blur-md border-t border-slate-200 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] z-50 flex justify-around items-center p-2 pb-safe">
+            <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-400'}`}>
+              <LayoutDashboard size={24} className={activeTab === 'dashboard' ? 'mb-1' : ''}/>
+              <span className={`text-[10px] font-bold ${activeTab === 'dashboard' ? 'opacity-100' : 'opacity-0 h-0'}`}>Inicio</span>
+            </button>
+            
+            <button onClick={() => setActiveTab('inventory')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${activeTab === 'inventory' ? 'text-blue-600' : 'text-slate-400'}`}>
+              <FolderOpen size={24} className={activeTab === 'inventory' ? 'mb-1' : ''}/>
+              <span className={`text-[10px] font-bold ${activeTab === 'inventory' ? 'opacity-100' : 'opacity-0 h-0'}`}>Bases</span>
+            </button>
+            
+            <button onClick={() => setActiveTab('scanner')} className={`relative -top-5 bg-blue-600 text-white p-4 rounded-full shadow-lg shadow-blue-500/40 border-4 border-slate-50 ${activeTab === 'scanner' ? 'scale-110' : ''} transition-transform`}>
+              <ScanLine size={24}/>
+            </button>
+            
+            <button onClick={() => {}} className="flex flex-col items-center p-2 rounded-xl transition-all text-slate-400 opacity-50 cursor-not-allowed">
+              <Settings size={24}/>
+            </button>
+          </nav>
 
-                  {/* PANEL DERECHO: ACCIÓN */}
-                  <div className="lg:col-span-7 bg-white rounded-3xl shadow-xl border border-gray-100 p-8 flex flex-col min-h-[500px]">
-                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-100 pb-4">Ficha Técnica y Operaciones</h3>
-                    
-                    {!scannedItem ? (
-                      <div className="flex-1 flex flex-col items-center justify-center text-gray-300 space-y-6 bg-slate-50/50 rounded-2xl border-2 border-dashed border-gray-200 p-10">
-                        <PackageSearch size={80} className="text-gray-300 animate-pulse" />
-                        <p className="font-bold text-xl text-gray-400 text-center">Esperando Lectura</p>
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex flex-col animate-fade-in h-full justify-between">
-                        <div>
-                          <div className="flex items-start justify-between mb-4">
-                            <div>
-                              <h4 className="text-3xl font-black text-gray-900 leading-tight mb-2">{scannedItem.name}</h4>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded border"><QrCode size={14} className="inline mr-1"/>{scannedItem.barcode}</p>
-                              </div>
-                            </div>
-                            {(scannedItem.imageUrls && scannedItem.imageUrls.length > 0) || scannedItem.imageUrl ? (
-                              <img src={scannedItem.imageUrls ? scannedItem.imageUrls[0] : scannedItem.imageUrl} className="w-24 h-24 rounded-xl object-cover border-2 border-gray-200 shadow-sm shrink-0" />
-                            ) : null}
-                          </div>
+        </div>
+      );
+    }
 
-                          <div className="bg-gray-50 rounded-2xl p-5 mb-4 text-sm border border-gray-200 grid grid-cols-2 gap-y-4 gap-x-4">
-                            <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Catálogo</p><p className="font-medium text-gray-900">{scannedItem.catalogNum || '--'}</p></div>
-                            <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Lote</p><p className="font-medium text-gray-900">{scannedItem.lotNum || '--'}</p></div>
-                            <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Marca</p><p className="font-medium text-gray-900">{scannedItem.brand || '--'}</p></div>
-                            <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Proveedor</p><p className="font-medium text-gray-900">{scannedItem.provider || '--'}</p></div>
-                            
-                            <div className="col-span-2 border-t border-gray-200 pt-3 flex justify-between items-center">
-                              <div>
-                                <p className="text-xs text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1"><Calendar size={12}/> Vencimiento</p>
-                                <p className={`font-bold mt-1 ${!scannedItem.expirationDate ? 'text-gray-600' : new Date(scannedItem.expirationDate) < new Date() ? 'text-red-600 text-base' : 'text-gray-900'}`}>
-                                  {scannedItem.expirationDate || 'N/A'} {scannedItem.expirationDate && new Date(scannedItem.expirationDate) < new Date() && ' (¡VENCIDO!)'}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                 <p className="text-xs text-gray-500 uppercase font-bold tracking-wider flex items-center justify-end gap-1"><MapPin size={12}/> Ubicación</p>
-                                 <p className="font-black text-gray-900 mt-1">{scannedItem.location}</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {scannedItem.observations && (
-                            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl mb-4">
-                              <p className="text-xs text-yellow-800 uppercase font-bold tracking-wider mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones de la Ficha</p>
-                              <p className="text-sm text-yellow-900 font-medium">{scannedItem.observations}</p>
-                            </div>
-                          )}
-
-                          <div className="bg-blue-600 text-white rounded-2xl p-6 mb-4 flex justify-between items-center shadow-lg">
-                            <div className="w-full">
-                              <p className="text-xs uppercase font-bold tracking-widest text-blue-200 mb-1">Inventario Actual</p>
-                              {scannedItem.stockType === 'jar' ? (
-                                 <div className="w-full bg-blue-800 rounded-full h-4 mb-2 mt-2">
-                                   <div className={`h-4 rounded-full ${scannedItem.qty < scannedItem.minThreshold ? 'bg-red-400' : 'bg-green-400'}`} style={{width: `${Math.min(scannedItem.qty, 100)}%`}}></div>
-                                 </div>
-                              ) : null}
-                              <div className="flex items-baseline gap-2">
-                                <p className="text-6xl font-black">{scannedItem.qty}</p>
-                                <p className="text-2xl font-medium text-blue-200">{scannedItem.stockType === 'jar' ? '%' : scannedItem.unit}</p>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* --- EN LA FICHA DE ESCÁNER (Botón de Compra Directa) --- */}
-                          {scannedItem.purchaseLink && (
-                            <a href={scannedItem.purchaseLink} target="_blank" className="block w-full text-center py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 mb-4 shadow-md transition-transform hover:-translate-y-1">
-                              🛒 Comprar / Reabastecer Reactivo
-                            </a>
-                          )}
-                        </div>
-                        
-                        <div className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-200 mt-4">
-                          <div className="flex bg-white p-1 rounded-xl shadow-sm border border-gray-200">
-                            <button onClick={() => setScanAction('info')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg ${scanAction === 'info' ? 'bg-slate-800 text-white' : 'text-gray-500'}`}>Solo Auditoría</button>
-                            <button onClick={() => setScanAction('remove')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg ${scanAction === 'remove' ? 'bg-orange-500 text-white' : 'text-gray-500'}`}>Consumir</button>
-                            {isAdmin && <button onClick={() => setScanAction('add')} className={`flex-1 py-3 text-sm font-black uppercase tracking-wider rounded-lg ${scanAction === 'add' ? 'bg-green-500 text-white' : 'text-gray-500'}`}>Ingresar</button>}
-                          </div>
-                          
-                          {scanAction !== 'info' && (
-                            <div className="animate-fade-in space-y-4 pt-2">
-                              {scanAction === 'remove' && (
-                                <div>
-                                  <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Motivo de Retiro *</label>
-                                  <select value={scanReason} onChange={e => setScanReason(e.target.value)} className="w-full p-3 rounded-xl border border-gray-300 font-medium outline-none focus:border-orange-500 bg-white">
-                                    <option value="Protocolo rutinario">Protocolo rutinario</option>
-                                    <option value="Muestra desperdiciada / Error">Muestra desperdiciada / Error</option>
-                                    <option value="Calibración de equipo">Calibración de equipo</option>
-                                    <option value="Limpieza o Mantenimiento">Limpieza o Mantenimiento</option>
-                                    <option value="Caducado / Contaminado">Caducado / Contaminado (Merma)</option>
-                                  </select>
-                                </div>
-                              )}
-                              
-                              <div className="flex flex-col sm:flex-row gap-4">
-                                <div className="flex items-center border-2 border-gray-300 rounded-xl bg-white shadow-inner sm:w-40 w-full">
-                                  <button type="button" onClick={() => setScanAmount(Math.max(1, scanAmount - 1))} className="p-4 text-gray-600 rounded-l-xl hover:bg-gray-100"><Minus size={20}/></button>
-                                  <input type="number" min="1" max={scannedItem.stockType === 'jar' ? "100" : ""} value={scanAmount} onChange={(e) => setScanAmount(parseInt(e.target.value) || 1)} className="w-full text-center font-black text-2xl outline-none"/>
-                                  <button type="button" onClick={() => setScanAmount(scanAmount + 1)} className="p-4 text-gray-600 rounded-r-xl hover:bg-gray-100"><Plus size={20}/></button>
-                                </div>
-                                <button id="btn-action-success" onClick={executeScanAction} className={`flex-1 py-4 rounded-xl font-black text-white text-lg uppercase tracking-wider shadow-xl ${scanAction === 'add' ? 'bg-green-600 hover:bg-green-500' : 'bg-orange-600 hover:bg-orange-500'} transition-transform hover:-translate-y-1`}>
-                                  {scanAction === 'add' ? 'Confirmar Ingreso' : 'Registrar Retiro'}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* === MÓDULO HISTORIAL === */}
-            {activeTab === 'history' && isAdmin && (
-              <div className="max-w-7xl mx-auto animate-fade-in space-y-6">
-                <div className="flex items-center gap-4 mb-6">
-                   <div className="bg-slate-800 p-4 rounded-2xl text-white shadow-lg"><ClipboardSignature size={32}/></div>
-                   <div>
-                     <h2 className="text-3xl font-black text-gray-900 tracking-tight">Historial Operativo</h2>
-                     <p className="text-gray-500 font-medium">Registro inmutable de movimientos en el inventario.</p>
-                   </div>
-                </div>
-                
-                <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left whitespace-nowrap">
-                      <thead className="bg-slate-50 border-b border-gray-200">
-                        <tr>
-                          <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha / Hora</th>
-                          <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Usuario</th>
-                          <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Operación</th>
-                          <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Reactivo / Equipo</th>
-                          <th className="p-5 text-xs font-bold text-gray-500 uppercase tracking-wider">Motivo Declarado</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {logs.slice(0, 150).map(log => (
-                          <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-5"><p className="font-bold text-gray-800">{new Date(log.timestamp).toLocaleDateString()}</p><p className="text-xs text-gray-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</p></td>
-                            <td className="p-5"><p className="font-bold text-gray-900 flex items-center gap-2"><User size={14} className="text-blue-500"/> {log.userName}</p><p className="text-xs text-gray-400">{log.userEmail}</p></td>
-                            <td className="p-5 text-center">
-                              <span className={`px-4 py-1.5 rounded-full text-[10px] uppercase font-black tracking-wider ${log.action === 'add' ? 'bg-green-100 text-green-700' : log.action === 'remove' ? 'bg-orange-100 text-orange-700' : log.action === 'create' ? 'bg-blue-100 text-blue-700' : log.action === 'update' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'}`}>
-                                {log.action === 'add' ? '+ INGRESO' : log.action === 'remove' ? '- CONSUMO' : log.action === 'create' ? 'CREACIÓN' : log.action === 'update' ? 'ACTUALIZADO' : 'ELIMINADO'} {log.amount > 0 ? `(${log.amount})` : ''}
-                              </span>
-                            </td>
-                            <td className="p-5 font-bold text-gray-800">{log.itemName}</td>
-                            <td className="p-5 text-sm font-medium text-gray-600 italic">"{log.reason || 'N/A'}"</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* === MÓDULO USUARIOS === */}
-            {activeTab === 'users' && currentUserData.role === 'superadmin' && (
-              <div className="max-w-5xl mx-auto animate-fade-in space-y-6">
-                <div className="flex items-center gap-4 mb-6">
-                   <div className="bg-purple-700 p-4 rounded-2xl text-white shadow-lg"><ShieldAlert size={32}/></div>
-                   <div><h2 className="text-3xl font-black text-gray-900">Panel de Seguridad</h2><p className="text-gray-500">Gestiona roles de los técnicos.</p></div>
-                </div>
-                <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead className="bg-gray-50 border-b border-gray-200"><tr><th className="p-6 text-xs font-bold text-gray-500 uppercase">Identidad</th><th className="p-6 text-xs font-bold text-gray-500 uppercase">Privilegios</th></tr></thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {allUsers.map(u => (
-                        <tr key={u.uid}>
-                          <td className="p-6 flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500 overflow-hidden">{u.photoURL ? <img src={u.photoURL}/> : <User size={20}/>}</div>
-                            <div><p className="font-bold text-gray-900">{u.name}</p><p className="text-xs text-gray-500 font-mono">{u.email}</p></div>
-                          </td>
-                          <td className="p-6">
-                            {SUPER_ADMIN_EMAILS.includes(u.email) ? (
-                              <span className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-black uppercase"><ShieldCheck size={14} className="inline mr-1"/> Propietario</span>
-                            ) : (
-                              <select value={u.role || 'user'} onChange={(e)=>handleUpdateUserRole(u.uid, e.target.value)} className="p-3 border rounded-xl font-bold text-sm outline-none bg-white">
-                                <option value="user">Usuario (Solo Consumir)</option><option value="admin">Administrador (Ingresos/CRUD)</option>
-                              </select>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  const root = createRoot(document.getElementById('root'));
-  root.render(<LabInventoryApp />);
+    const root = createRoot(document.getElementById('root'));
+    root.render(<MainApp />);
   </script>
 </body>
 </html>
