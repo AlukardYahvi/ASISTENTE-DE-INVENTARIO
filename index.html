@@ -39,7 +39,8 @@
       Mail, ExternalLink, Calendar, ShieldCheck, User, LogOut, ShoppingCart, 
       Info, QrCode, Settings, Folder, ChevronRight, ArrowLeft, Users, ShieldAlert, X, Printer,
       Image: ImageIcon, Truck, Beaker, FileText, Download, LayoutGrid, List, CreditCard, ClipboardSignature, CheckSquare, Layers, Upload, Trash2,
-      Dna, TestTubes, FlaskConical, ArrowRightLeft, Package, PackageOpen, Bell, BellRing, MinusCircle
+      Dna, TestTubes, FlaskConical, ArrowRightLeft, Package, PackageOpen, Bell, BellRing, MinusCircle,
+      Filter, RotateCcw, Sparkles
     } = LucideIcons;
 
     const MIS_CREDENCIALES_FIREBASE = {
@@ -68,6 +69,198 @@
       { id: 'consumibles', name: 'Consumibles Generales', icon: '📦', color: 'bg-amber-100 text-amber-700' },
       { id: 'biomol', name: 'Biología Molecular', icon: '🧬', color: 'bg-indigo-100 text-indigo-700' }
     ];
+
+    // === MAPA FÍSICO DEL LABORATORIO (Área -> Mesa/Equipo -> Sub-ubicación) ===
+    const LAB_LOCATIONS = {
+      'Mesas de Laboratorio': {
+        'Mesa Alexander Fleming': [
+          'Superficie de mesa',
+          'Cajón 1 A-F (Balanza y disección)',
+          'Cajón 2 A-F (Material para balanza y disección cajón 1-2)',
+          'Cajón 3 A-F (Vacío)',
+          'Cajón 4 A-F (Gradillas)',
+          'Cajón 5 A-F (Gradillas)',
+          'Cajón 6 A-F (Moldes, esponjitas y repositorios para pipeta)',
+          'Cajón "Yatziry"',
+          'Gaveta T. A-F',
+          'Gaveta 1 (Cristalería, desecador, papel filtro)',
+          'Gaveta 2 A-F (Ocupada, sin etiqueta)',
+          'Gaveta 3 A-F (Material WB)',
+          'Gaveta 4 A-F (Reactivos líquidos)'
+        ],
+        'Mesa Niels Bohr': [
+          'Superficie de mesa',
+          'Cajón 1 NB (Vacío)',
+          'Cajón 2 NB (Micropipetas)',
+          'Cajón 3 NB (Conectores, agujas, cánulas, etc.)',
+          'Cajón 4 NB (Tubos Falcon)',
+          'Cajón 5 NB (Pipetas)',
+          'Cajón 6 NB (Frascos chiquitos)',
+          'Cajón 7 NB (Ocupado, sin etiqueta)',
+          'Cajón 8 (Atomizadores chiquitos)',
+          'Gaveta T. NB',
+          'Gaveta 2 NB (Material curación)',
+          'Gaveta 3 NB (Material de módulo salud)',
+          'Gaveta 4 NB (Plásticos chicos / Frascos)',
+          'Gaveta "Misael"'
+        ],
+        'Mesa Louis Pasteur': [
+          'Superficie de mesa',
+          'Cajón 1 LP (Vacío)',
+          'Cajón 2 LP (Vacío)',
+          'Cajón 3 LP (Vacío)',
+          'Cajón 4 LP',
+          'Cajón 5 LP (Vacío)',
+          'Cajón 6 LP (Vacío)',
+          'Cajón 7 LP (Vacío)',
+          'Cajón 8 LP (Vacío)',
+          'Cajón sin nombre (hay cosas)',
+          'Gaveta T. LP',
+          'Gaveta 1 LP (Mat. Ratón)',
+          'Gaveta 2 LP (Cajitas)',
+          'Gaveta 3 LP (Plásticos / Dr. Israel)',
+          'Gaveta 4 LP (Bebederos rat.)'
+        ],
+        'Mesa Rosalind Franklin': [
+          'Superficie de mesa',
+          'Cajón 1 RF (Tubos Falcon - vacío)',
+          'Cajón 2 RF (Mat. *)',
+          'Cajón 3 RF (Mat. / Cultivo)',
+          'Cajón 4 RF (Mat. Lisado / Extracción de ADN)',
+          'Cajón 5 RF (Mat. esterilización)',
+          'Cajón 6 RF (Vacío)',
+          'Cajón "Yuri" 1',
+          'Cajón "Yuri" 2',
+          'Gaveta T. RF',
+          'Gaveta 1 R.F. (Mat. Plásticos Cuarto de cultivo)',
+          'Gaveta "Yahvi"',
+          'Gaveta "Citlali"',
+          'Gaveta sin nombre (tiene cosas)'
+        ],
+        'Mesa Sklodowska': ['Superficie de mesa', 'Repisa Lavoisier'],
+        'Mesa Werner Heisenberg': ['Superficie de mesa', 'Repisa Dmitri Mendeleyev'],
+        'Mesa Galileo Galilei': ['Superficie de mesa', 'Repisa Isaac Newton'],
+        'Mesa Linus Pauling': ['Superficie de mesa', 'Repisa Albert Einstein'],
+        'Mesa Max Planck': ['Superficie de mesa', 'Repisa Erwin Schrödinger'],
+        'Mesa Gregor Mendel': ['Superficie de mesa', 'Repisa Gilbert N. Lewis'],
+        'Mesa Alan Turing': ['Superficie de mesa'],
+        'Mesa Charles Darwin': ['Superficie de mesa'],
+        'Mesa M sección 3': ['Superficie de mesa']
+      },
+      'Refrigeradores': {
+        'Refri 1': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta'],
+        'Refri 2': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta'],
+        'Refri 3': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta'],
+        'Refri 4': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta'],
+        'Refri 5': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta'],
+        'Refri 6': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta'],
+        'Refri 7': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta'],
+        'Refri 8': ['General / Interior', 'Congelador', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior', 'Puerta']
+      },
+      'Cuartos Especializados': {
+        'Área Cuarto de cultivo': ['General', 'Incubadora', 'Campana de Flujo Laminar', 'Mesa de Trabajo', 'Estante / Gaveta', 'Refrigerador / Congelador'],
+        'Cuarto de PCR': ['General', 'Mesa de Trabajo', 'Zona de Equipos', 'Estante / Gaveta', 'Refrigerador / Congelador'],
+        'Cuarto frío': ['General', 'Estante Superior', 'Estante Medio', 'Estante Inferior', 'Mesa / Piso']
+      },
+      'Almacén y Gavetas Generales': {
+        'Reactivos en orden alfabético': ['General', 'Sección A - E', 'Sección F - J', 'Sección K - O', 'Sección P - T', 'Sección U - Z'],
+        'Gaveta de plásticos': ['General', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior'],
+        'Gaveta de papelería': ['General', 'Nivel Superior', 'Nivel Medio', 'Nivel Inferior'],
+        'Cristalería': ['General', 'Estante Superior', 'Estante Medio', 'Estante Inferior']
+      }
+    };
+
+    const normalizeText = (str) => (str || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    const buildLocationString = (area, mesa, gaveta, detail = '') => {
+      const parts = [area, mesa, gaveta].filter(Boolean);
+      if (parts.length === 0) return (detail || '').trim();
+      return parts.join(' > ') + (detail && detail.trim() ? ` (${detail.trim()})` : '');
+    };
+
+    const suggestStructuredLocation = (rawLocation) => {
+      const text = normalizeText(rawLocation);
+      if (!text.trim()) return null;
+
+      // 1. Refrigeradores 1-8
+      const refriMatch = text.match(/refri(?:gerador)?\s*#?\s*([1-8])\b/);
+      if (refriMatch) {
+        const refriName = `Refri ${refriMatch[1]}`;
+        let sub = 'General / Interior';
+        if (text.includes('congel')) sub = 'Congelador';
+        else if (text.includes('puerta')) sub = 'Puerta';
+        else if (text.includes('superior') || text.includes('arriba')) sub = 'Nivel Superior';
+        else if (text.includes('medio') || text.includes('centro')) sub = 'Nivel Medio';
+        else if (text.includes('inferior') || text.includes('abajo')) sub = 'Nivel Inferior';
+        return { area: 'Refrigeradores', mesa: refriName, gaveta: sub };
+      }
+
+      // 2. Cuartos Especializados
+      if (text.includes('cuarto de cultivo') || text.includes('cuarto cultivo')) {
+        return { area: 'Cuartos Especializados', mesa: 'Área Cuarto de cultivo', gaveta: 'General' };
+      }
+      if (text.includes('cuarto de pcr') || text.includes('cuarto pcr') || /\bpcr\b/.test(text)) {
+        return { area: 'Cuartos Especializados', mesa: 'Cuarto de PCR', gaveta: 'General' };
+      }
+      if (text.includes('cuarto frio')) {
+        return { area: 'Cuartos Especializados', mesa: 'Cuarto frío', gaveta: 'General' };
+      }
+
+      // 3. Mesas con repisas / específicas
+      const mesaHints = [
+        { keys: ['fleming', 'a-f', 'yatziry'], mesa: 'Mesa Alexander Fleming' },
+        { keys: ['bohr', 'niels', ' nb', 'nb ', 'misael'], mesa: 'Mesa Niels Bohr' },
+        { keys: ['pasteur', 'louis', ' lp', 'lp ', 'israel'], mesa: 'Mesa Louis Pasteur' },
+        { keys: ['franklin', 'rosalind', ' rf', 'rf ', 'r.f.', 'yuri', 'yahvi', 'citlali'], mesa: 'Mesa Rosalind Franklin' },
+        { keys: ['sklodowska', 'lavoisier'], mesa: 'Mesa Sklodowska', defaultSub: text.includes('lavoisier') ? 'Repisa Lavoisier' : 'Superficie de mesa' },
+        { keys: ['heisenberg', 'mendeleyev', 'mendeleiev'], mesa: 'Mesa Werner Heisenberg', defaultSub: text.includes('mendele') ? 'Repisa Dmitri Mendeleyev' : 'Superficie de mesa' },
+        { keys: ['galileo', 'galilei', 'newton'], mesa: 'Mesa Galileo Galilei', defaultSub: text.includes('newton') ? 'Repisa Isaac Newton' : 'Superficie de mesa' },
+        { keys: ['pauling', 'linus', 'einstein'], mesa: 'Mesa Linus Pauling', defaultSub: text.includes('einstein') ? 'Repisa Albert Einstein' : 'Superficie de mesa' },
+        { keys: ['planck', 'schrodinger'], mesa: 'Mesa Max Planck', defaultSub: text.includes('schrodinger') ? 'Repisa Erwin Schrödinger' : 'Superficie de mesa' },
+        { keys: ['mendel', 'gregor', 'lewis'], mesa: 'Mesa Gregor Mendel', defaultSub: text.includes('lewis') ? 'Repisa Gilbert N. Lewis' : 'Superficie de mesa' },
+        { keys: ['turing', 'alan'], mesa: 'Mesa Alan Turing', defaultSub: 'Superficie de mesa' },
+        { keys: ['darwin', 'charles'], mesa: 'Mesa Charles Darwin', defaultSub: 'Superficie de mesa' },
+        { keys: ['mesa m', 'seccion 3'], mesa: 'Mesa M sección 3', defaultSub: 'Superficie de mesa' }
+      ];
+
+      for (const hint of mesaHints) {
+        if (hint.keys.some(k => text.includes(k))) {
+          const subs = LAB_LOCATIONS['Mesas de Laboratorio'][hint.mesa] || [];
+          let matchedSub = hint.defaultSub || 'Superficie de mesa';
+
+          // Buscar cajón o gaveta específica dentro de la mesa
+          for (const s of subs) {
+            const normSub = normalizeText(s);
+            if (text.includes('yatziry') && normSub.includes('yatziry')) { matchedSub = s; break; }
+            if (text.includes('misael') && normSub.includes('misael')) { matchedSub = s; break; }
+            if (text.includes('yahvi') && normSub.includes('yahvi')) { matchedSub = s; break; }
+            if (text.includes('citlali') && normSub.includes('citlali')) { matchedSub = s; break; }
+            if (text.includes('yuri') && normSub.includes('yuri')) { matchedSub = s; break; }
+            const cajonNum = text.match(/cajon\s*([1-8])/);
+            if (cajonNum && normSub.startsWith(`cajon ${cajonNum[1]}`)) { matchedSub = s; break; }
+            const gavetaNum = text.match(/gaveta\s*([1-4]|t\b)/);
+            if (gavetaNum && normSub.startsWith(`gaveta ${gavetaNum[1]}`)) { matchedSub = s; break; }
+          }
+          return { area: 'Mesas de Laboratorio', mesa: hint.mesa, gaveta: matchedSub };
+        }
+      }
+
+      // 4. Almacén y Gavetas Generales
+      if (text.includes('alfabetic') || text.includes('orden alfabetico')) {
+        return { area: 'Almacén y Gavetas Generales', mesa: 'Reactivos en orden alfabético', gaveta: 'General' };
+      }
+      if (text.includes('papeleria')) {
+        return { area: 'Almacén y Gavetas Generales', mesa: 'Gaveta de papelería', gaveta: 'General' };
+      }
+      if (text.includes('plasticos') && text.includes('gaveta')) {
+        return { area: 'Almacén y Gavetas Generales', mesa: 'Gaveta de plásticos', gaveta: 'General' };
+      }
+      if (text.includes('cristaleria')) {
+        return { area: 'Almacén y Gavetas Generales', mesa: 'Cristalería', gaveta: 'General' };
+      }
+
+      return null;
+    };
 
     const SUPER_ADMIN_EMAILS = [
       'yahvi.edsel.hernandez@gmail.com',
@@ -114,6 +307,34 @@
       const [formSealStatus, setFormSealStatus] = useState('sealed');
       
       const [formEnableAlert, setFormEnableAlert] = useState(true);
+
+      // === NUEVOS ESTADOS: UBICACIÓN ESTRUCTURADA EN FORMULARIO ===
+      const [formArea, setFormArea] = useState('');
+      const [formMesa, setFormMesa] = useState('');
+      const [formGaveta, setFormGaveta] = useState('');
+      const [formLocationDetail, setFormLocationDetail] = useState('');
+      const [formLegacyLocation, setFormLegacyLocation] = useState('');
+
+      // === NUEVOS ESTADOS: BUSCADOR MAESTRO Y ORGANIZADOR MASIVO ===
+      const [masterMode, setMasterMode] = useState('search'); // 'search' | 'organizer'
+      const [masterQuery, setMasterQuery] = useState('');
+      const [masterArea, setMasterArea] = useState('');
+      const [masterMesa, setMasterMesa] = useState('');
+      const [masterGaveta, setMasterGaveta] = useState('');
+      const [masterCategory, setMasterCategory] = useState('');
+      const [dashboardQuickSearch, setDashboardQuickSearch] = useState('');
+
+      // Estados para Organizador Masivo (Admins)
+      const [orgFilterUnassignedOnly, setOrgFilterUnassignedOnly] = useState(true);
+      const [orgCategoryFilter, setOrgCategoryFilter] = useState('');
+      const [orgSearchText, setOrgSearchText] = useState('');
+      const [selectedBulkIds, setSelectedBulkIds] = useState([]);
+      const [bulkArea, setBulkArea] = useState('');
+      const [bulkMesa, setBulkMesa] = useState('');
+      const [bulkGaveta, setBulkGaveta] = useState('');
+      const [bulkDetail, setBulkDetail] = useState('');
+      const [bulkSaving, setBulkSaving] = useState(false);
+      const [autoMatchesPreview, setAutoMatchesPreview] = useState(null);
       
       const scannerInputRef = useRef(null);
       const hiddenSubmitBtnRef = useRef(null);
@@ -209,12 +430,32 @@
           setImagePreviews(loadedImages);
           setFormStockType(editingItem.stockType || 'unit');
           setFormSealStatus(editingItem.sealStatus || 'sealed');
-          setFormEnableAlert(editingItem.enableLowStockAlert !== false); 
+          setFormEnableAlert(editingItem.enableLowStockAlert !== false);
+          setFormArea(editingItem.area || '');
+          setFormMesa(editingItem.mesa || '');
+          setFormGaveta(editingItem.gaveta || '');
+          setFormLocationDetail(editingItem.locationDetail || '');
+          setFormLegacyLocation(editingItem.location || '');
+        } else if (showItemForm && !editingItem) {
+          setImagePreviews([]);
+          setFormStockType('unit');
+          setFormSealStatus('sealed');
+          setFormEnableAlert(true);
+          setFormArea('');
+          setFormMesa('');
+          setFormGaveta('');
+          setFormLocationDetail('');
+          setFormLegacyLocation('');
         } else if (!showItemForm) {
           setImagePreviews([]);
           setFormStockType('unit');
           setFormSealStatus('sealed');
-          setFormEnableAlert(true); 
+          setFormEnableAlert(true);
+          setFormArea('');
+          setFormMesa('');
+          setFormGaveta('');
+          setFormLocationDetail('');
+          setFormLegacyLocation('');
         }
       }, [showItemForm, editingItem]);
 
@@ -261,6 +502,7 @@
         return inventory.filter(i => i.expirationDate && new Date(i.expirationDate) <= thirtyDays && new Date(i.expirationDate) >= today).sort((a,b) => new Date(a.expirationDate) - new Date(b.expirationDate));
       };
       const expiringItems = getExpiringSoonItems();
+      const unassignedLocationCount = inventory.filter(i => !i.area).length;
 
       const handleOrderStatusChange = async (item, newStatus) => {
         if (!isAdmin) return alert("Solo administradores.");
@@ -294,15 +536,15 @@
 Por medio del presente correo, me dirijo a usted para solicitar formalmente la compra o reabastecimiento del siguiente artículo, el cual ha alcanzado un nivel crítico o requiere atención en el inventario del laboratorio.
 
 --- DETALLES TÉCNICOS DEL ARTÍCULO ---
-• Producto / Reactivo: ${item.name}
-• Categoría: ${item.category || 'N/A'}
-• Proveedor y Marca: ${item.provider || 'N/A'} / ${item.brand || 'N/A'}
-• Número de Catálogo: ${item.catalogNum || 'N/A'}
-• Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo de seguridad es ${item.minThreshold || 'N/A'})
+- Producto / Reactivo: ${item.name}
+- Categoría: ${item.category || 'N/A'}
+- Proveedor y Marca: ${item.provider || 'N/A'} / ${item.brand || 'N/A'}
+- Número de Catálogo: ${item.catalogNum || 'N/A'}
+- Stock Físico Actual: ${item.qty} ${item.stockType === 'jar' ? '%' : item.unit} (El mínimo de seguridad es ${item.minThreshold || 'N/A'})
 
 --- ENLACES Y REFERENCIAS ---
-• Enlace sugerido de compra: ${item.purchaseLink || 'No especificado en sistema'}
-• Referencia Visual: ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
+- Enlace sugerido de compra: ${item.purchaseLink || 'No especificado en sistema'}
+- Referencia Visual: ${item.imageUrls?.[0] || item.imageUrl || 'No se subió fotografía'}
 
 Quedo a su entera disposición en caso de requerir información adicional o especificaciones para proceder con el trámite.
 
@@ -339,7 +581,7 @@ ${currentUserData.name}
       const handleExportCSV = () => {
         if (currentUserData.role !== 'superadmin') return alert("Solo los superadministradores pueden descargar la base de datos completa.");
         
-        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Cantidad', 'Estado', 'Tipo_Stock', 'Unidad', 'Alerta_Manual', 'Ubicacion', 'Caducidad', 'Observaciones', 'Enlace_Compra'];
+        const headers = ['ID/Codigo', 'Nombre', 'Categoria', 'Catalogo', 'Lote', 'Proveedor', 'Marca', 'Cantidad', 'Estado', 'Tipo_Stock', 'Unidad', 'Alerta_Manual', 'Ubicacion', 'Caducidad', 'Observaciones', 'Enlace_Compra', 'Area', 'Mesa_Equipo', 'Gaveta_Cajon', 'Detalle_Ubicacion'];
         
         const rows = inventory.map(i => {
           const obs = i.observations ? i.observations.replace(/"/g, '""').replace(/\n/g, ' ') : '';
@@ -348,7 +590,8 @@ ${currentUserData.name}
           return [
             `"${i.barcode||i.id}"`, `"${name}"`, `"${i.category||''}"`, 
             `"${i.catalogNum||''}"`, `"${i.lotNum||''}"`, `"${i.provider||''}"`, `"${i.brand||''}"`, 
-            i.qty, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.stockType||'unit'}"`, `"${i.unit||''}"`, `"${i.manualAlert ? 'SI' : 'NO'}"`, `"${i.location||''}"`, `"${i.expirationDate||''}"`, `"${obs}"`, `"${i.purchaseLink||''}"`
+            i.qty, `"${i.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}"`, `"${i.stockType||'unit'}"`, `"${i.unit||''}"`, `"${i.manualAlert ? 'SI' : 'NO'}"`, `"${i.location||''}"`, `"${i.expirationDate||''}"`, `"${obs}"`, `"${i.purchaseLink||''}"`,
+            `"${i.area||''}"`, `"${i.mesa||''}"`, `"${i.gaveta||''}"`, `"${i.locationDetail||''}"`
           ];
         });
         
@@ -473,6 +716,19 @@ ${currentUserData.name}
         e.preventDefault(); if (!isAdmin) return alert("Sin permisos.");
         const formData = new FormData(e.target); const itemData = Object.fromEntries(formData.entries());
         
+        // Ubicación estructurada + compatibilidad con campo 'location'
+        const structuredLoc = buildLocationString(formArea, formMesa, formGaveta, formLocationDetail);
+        const finalLocation = formArea ? structuredLoc : (formLegacyLocation || itemData.location || '').trim();
+        if (!finalLocation) {
+          return alert("Por favor selecciona el Área y Mesa/Equipo donde se ubica el artículo.");
+        }
+
+        itemData.area = formArea || '';
+        itemData.mesa = formMesa || '';
+        itemData.gaveta = formGaveta || '';
+        itemData.locationDetail = formLocationDetail.trim();
+        itemData.location = finalLocation;
+
         itemData.qty = Number(itemData.qty); 
         itemData.minThreshold = Number(itemData.minThreshold);
         if (generatedQR && !itemData.barcode) itemData.barcode = generatedQR;
@@ -602,6 +858,171 @@ ${currentUserData.name}
         } catch (err) { alert("Error al registrar el uso: " + err.message); }
       };
 
+      // === FUNCIONES DEL BUSCADOR MAESTRO Y ORGANIZADOR MASIVO ===
+      const openItemForEdit = (item) => {
+        setViewingItem(null);
+        setSelectedFolder(item.category || CATEGORIES[0].name);
+        setEditingItem(item);
+        setGeneratedQR(item.barcode || '');
+        setActiveTab('inventory');
+        setShowItemForm(true);
+      };
+
+      const openItemInScanner = (item) => {
+        setViewingItem(null);
+        setScannedItem(item);
+        setScanAmount(1);
+        setScanReason('Protocolo rutinario');
+        setScanAction('info');
+        setActiveTab('scanner');
+      };
+
+      const handleDashboardQuickSearchSubmit = (e) => {
+        e.preventDefault();
+        setMasterQuery(dashboardQuickSearch);
+        setMasterMode('search');
+        setActiveTab('master_search');
+      };
+
+      const masterFilteredItems = inventory.filter(item => {
+        if (masterArea === '__unassigned__') {
+          if (item.area) return false;
+        } else if (masterArea) {
+          if (item.area !== masterArea) return false;
+        }
+        if (masterMesa && item.mesa !== masterMesa) return false;
+        if (masterGaveta && item.gaveta !== masterGaveta) return false;
+        if (masterCategory && item.category !== masterCategory) return false;
+
+        if (masterQuery.trim()) {
+          const q = normalizeText(masterQuery.trim());
+          const searchable = normalizeText([
+            item.name, item.barcode, item.id, item.catalogNum, item.lotNum,
+            item.brand, item.provider, item.category, item.location,
+            item.area, item.mesa, item.gaveta, item.locationDetail,
+            item.characteristics, item.observations
+          ].join(' '));
+          if (!searchable.includes(q)) return false;
+        }
+        return true;
+      });
+
+      const organizerFilteredItems = inventory.filter(item => {
+        if (orgFilterUnassignedOnly && item.area) return false;
+        if (orgCategoryFilter && item.category !== orgCategoryFilter) return false;
+        if (orgSearchText.trim()) {
+          const q = normalizeText(orgSearchText.trim());
+          const searchable = normalizeText([
+            item.name, item.location, item.barcode, item.catalogNum, item.lotNum, item.category
+          ].join(' '));
+          if (!searchable.includes(q)) return false;
+        }
+        return true;
+      });
+
+      const toggleBulkSelect = (id) => {
+        setSelectedBulkIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+      };
+
+      const toggleSelectAllVisible = () => {
+        const visibleIds = organizerFilteredItems.map(i => i.id);
+        const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedBulkIds.includes(id));
+        if (allSelected) {
+          setSelectedBulkIds(prev => prev.filter(id => !visibleIds.includes(id)));
+        } else {
+          setSelectedBulkIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+        }
+      };
+
+      const handleBulkAssignLocation = async () => {
+        if (!isAdmin) return alert("Solo administradores pueden organizar ubicaciones.");
+        if (selectedBulkIds.length === 0) return alert("Selecciona al menos un artículo.");
+        if (!bulkArea || !bulkMesa) return alert("Selecciona el Área y la Mesa / Equipo destino.");
+
+        const finalGaveta = bulkGaveta || (LAB_LOCATIONS[bulkArea]?.[bulkMesa]?.[0] || '');
+        const formattedLocation = buildLocationString(bulkArea, bulkMesa, finalGaveta, bulkDetail);
+
+        if (!window.confirm(`¿Asignar la ubicación:\n"${formattedLocation}"\na los ${selectedBulkIds.length} artículos seleccionados?`)) return;
+
+        setBulkSaving(true);
+        try {
+          await Promise.all(selectedBulkIds.map(id =>
+            setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id), {
+              area: bulkArea,
+              mesa: bulkMesa,
+              gaveta: finalGaveta,
+              locationDetail: bulkDetail.trim(),
+              location: formattedLocation
+            }, { merge: true })
+          ));
+
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
+            itemId: 'bulk_location',
+            itemName: `${selectedBulkIds.length} artículos`,
+            action: 'update',
+            amount: selectedBulkIds.length,
+            reason: `Asignación masiva de ubicación: ${formattedLocation}`,
+            userName: currentUserData.name,
+            userEmail: currentUserData.email,
+            timestamp: new Date().toISOString()
+          });
+
+          alert(`¡Listo! Se actualizaron ${selectedBulkIds.length} artículos.`);
+          setSelectedBulkIds([]);
+          setBulkDetail('');
+        } catch (err) {
+          alert("Error al actualizar ubicaciones: " + err.message);
+        }
+        setBulkSaving(false);
+      };
+
+      const handleAnalyzeAutoLocations = () => {
+        const matches = [];
+        inventory.filter(i => !i.area && i.location).forEach(item => {
+          const suggestion = suggestStructuredLocation(item.location);
+          if (suggestion) {
+            matches.push({ item, suggestion });
+          }
+        });
+        setAutoMatchesPreview(matches);
+      };
+
+      const handleApplyAutoMatches = async () => {
+        if (!isAdmin || !autoMatchesPreview || autoMatchesPreview.length === 0) return;
+        if (!window.confirm(`Se asignará ubicación estructurada a ${autoMatchesPreview.length} artículos detectados automáticamente. ¿Deseas continuar?`)) return;
+
+        setBulkSaving(true);
+        try {
+          await Promise.all(autoMatchesPreview.map(({ item, suggestion }) => {
+            const newLoc = buildLocationString(suggestion.area, suggestion.mesa, suggestion.gaveta, '');
+            return setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', item.id), {
+              area: suggestion.area,
+              mesa: suggestion.mesa,
+              gaveta: suggestion.gaveta,
+              locationDetail: item.locationDetail || '',
+              location: newLoc
+            }, { merge: true });
+          }));
+
+          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'logs', `log_${Date.now()}`), {
+            itemId: 'auto_migration',
+            itemName: `${autoMatchesPreview.length} artículos`,
+            action: 'update',
+            amount: autoMatchesPreview.length,
+            reason: 'Migración automática de ubicaciones físicas',
+            userName: currentUserData.name,
+            userEmail: currentUserData.email,
+            timestamp: new Date().toISOString()
+          });
+
+          alert(`¡Migración exitosa! Se organizaron ${autoMatchesPreview.length} artículos.`);
+          setAutoMatchesPreview(null);
+        } catch (err) {
+          alert("Error en migración automática: " + err.message);
+        }
+        setBulkSaving(false);
+      };
+
       if (!currentUserData) {
         return (
           <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-900 flex items-center justify-center p-4">
@@ -642,6 +1063,10 @@ ${currentUserData.name}
             <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-2">Navegación</p>
               <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><LayoutDashboard size={20} /> Dashboard General</button>
+              <button onClick={() => { setActiveTab('master_search'); setMasterMode('search'); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${activeTab === 'master_search' ? 'bg-cyan-600 text-white shadow-md' : 'hover:bg-slate-800 text-cyan-300 font-semibold'}`}>
+                <span className="flex items-center gap-3"><Search size={20} /> Buscador Maestro</span>
+                <MapPin size={14} className="opacity-80"/>
+              </button>
               <button onClick={() => {setActiveTab('inventory'); setSelectedFolder(null); setShowItemForm(false);}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><Folder size={20} /> Catálogo de Inventario</button>
               <button onClick={() => setActiveTab('scanner')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'scanner' ? 'bg-blue-600 text-white' : 'hover:bg-slate-800'}`}><ScanLine size={20} /> Escáner de Uso</button>
               
@@ -693,9 +1118,10 @@ ${currentUserData.name}
             <header className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md z-10">
               <span className="font-bold flex items-center gap-2"><Boxes size={24} className="text-blue-500" /> LabManager</span>
               <div className="flex gap-4">
-                <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''}><LayoutDashboard/></button>
-                <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-400' : ''}><Folder/></button>
-                <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''}><ScanLine/></button>
+                <button onClick={() => setActiveTab('dashboard')} className={activeTab === 'dashboard' ? 'text-blue-400' : ''} title="Dashboard"><LayoutDashboard/></button>
+                <button onClick={() => { setActiveTab('master_search'); setMasterMode('search'); }} className={activeTab === 'master_search' ? 'text-cyan-400' : ''} title="Buscador Maestro"><Search/></button>
+                <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-400' : ''} title="Catálogo"><Folder/></button>
+                <button onClick={() => setActiveTab('scanner')} className={activeTab === 'scanner' ? 'text-blue-400' : ''} title="Escáner"><ScanLine/></button>
                 {/* <a href="reactivos.html" title="Reactivos" className="text-gray-400 hover:text-blue-400"><FlaskConical size={24}/></a> */}
               </div>
             </header>
@@ -709,6 +1135,35 @@ ${currentUserData.name}
                     <h2 className="text-3xl font-extrabold text-gray-900">Hola, {currentUserData.name.split(' ')[0]}</h2>
                     <p className="text-gray-500 mt-1">Panel General de Laboratorio</p>
                   </div>
+
+                  {/* ATAJO RÁPIDO AL BUSCADOR MAESTRO */}
+                  <form onSubmit={handleDashboardQuickSearchSubmit} className="bg-gradient-to-r from-slate-900 via-blue-950 to-cyan-950 p-6 rounded-3xl shadow-xl border border-slate-800 text-white">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                      <div>
+                        <h3 className="text-xl font-black flex items-center gap-2"><Search size={22} className="text-cyan-400"/> Buscador Maestro del Laboratorio</h3>
+                        <p className="text-xs text-slate-300 mt-0.5">Encuentra cualquier reactivo, equipo o consumible y revisa exactamente en qué mesa, cajón, gaveta o refri está.</p>
+                      </div>
+                      <button type="button" onClick={() => { setMasterMode('search'); setActiveTab('master_search'); }} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl flex items-center gap-1.5 self-start sm:self-center transition-colors">
+                        <MapPin size={14} className="text-cyan-300"/> Explorar por Áreas y Mesas
+                      </button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+                        <input
+                          type="text"
+                          value={dashboardQuickSearch}
+                          onChange={(e) => setDashboardQuickSearch(e.target.value)}
+                          placeholder="Buscar por nombre, catálogo, lote, marca, mesa, gaveta, refri..."
+                          className="w-full pl-12 pr-4 py-3.5 rounded-xl bg-white text-gray-900 font-medium outline-none focus:ring-2 focus:ring-cyan-400"
+                        />
+                      </div>
+                      <button type="submit" className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-3.5 rounded-xl shadow-lg transition-colors">
+                        Buscar en Todo
+                      </button>
+                    </div>
+                  </form>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div onClick={() => setActiveTab('inventory')} className="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-5 cursor-pointer hover:shadow-md">
                       <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Boxes size={32}/></div>
@@ -723,6 +1178,520 @@ ${currentUserData.name}
                       <div><p className="text-sm text-gray-500 font-bold uppercase">Caducan Pronto</p><p className="text-4xl font-black text-orange-600">{expiringItems.length}</p></div>
                     </div>
                   </div>
+
+                  {isAdmin && unassignedLocationCount > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-amber-100 text-amber-700 rounded-xl"><MapPin size={24}/></div>
+                        <div>
+                          <p className="font-bold text-amber-900">Tienes {unassignedLocationCount} elementos sin ubicación estructurada (Área / Mesa / Gaveta)</p>
+                          <p className="text-xs text-amber-800">Usa el Organizador Masivo para acomodarlos rápidamente sin editar uno por uno.</p>
+                        </div>
+                      </div>
+                      <button onClick={() => { setActiveTab('master_search'); setMasterMode('organizer'); }} className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-5 py-2.5 rounded-xl shadow-sm shrink-0">
+                        Organizar Ahora
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* === MÓDULO BUSCADOR MAESTRO Y ORGANIZADOR DE UBICACIONES === */}
+              {activeTab === 'master_search' && (
+                <div className="max-w-7xl mx-auto animate-fade-in space-y-6 pb-20">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-cyan-600 p-3.5 rounded-2xl text-white shadow-lg"><Search size={28}/></div>
+                      <div>
+                        <h2 className="text-3xl font-black text-gray-900 tracking-tight">Buscador Maestro</h2>
+                        <p className="text-gray-500 text-sm">Busca en todas las categorías y localiza cualquier artículo por Área, Mesa, Cajón, Gaveta o Refri.</p>
+                      </div>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="flex bg-white p-1.5 rounded-2xl border border-gray-200 shadow-sm self-start md:self-center">
+                        <button
+                          onClick={() => setMasterMode('search')}
+                          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${masterMode === 'search' ? 'bg-cyan-600 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}`}
+                        >
+                          <Search size={14}/> Buscador Global
+                        </button>
+                        <button
+                          onClick={() => setMasterMode('organizer')}
+                          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${masterMode === 'organizer' ? 'bg-amber-600 text-white shadow' : 'text-gray-500 hover:bg-gray-100'}`}
+                        >
+                          <Layers size={14}/> Organizar Ubicaciones
+                          {unassignedLocationCount > 0 && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${masterMode === 'organizer' ? 'bg-white text-amber-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {unassignedLocationCount}
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* --- SUB-MODO 1: BUSCADOR MAESTRO GLOBAL --- */}
+                  {masterMode === 'search' && (
+                    <div className="space-y-6">
+                      {/* PANEL DE BÚSQUEDA Y FILTROS EN CASCADA */}
+                      <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-5">
+                        <div className="relative">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-600" size={22}/>
+                          <input
+                            type="text"
+                            value={masterQuery}
+                            onChange={(e) => setMasterQuery(e.target.value)}
+                            placeholder="Escribe nombre, catálogo, lote, código QR, marca, proveedor, observaciones o ubicación..."
+                            className="w-full pl-12 pr-12 py-4 bg-slate-50 border-2 border-slate-200 focus:border-cyan-500 focus:bg-white rounded-2xl text-base font-semibold outline-none transition-all"
+                          />
+                          {masterQuery && (
+                            <button onClick={() => setMasterQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                              <X size={20}/>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="pt-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                              <Filter size={14} className="text-cyan-600"/> Explorar por Ubicación Física y Categoría
+                            </p>
+                            {(masterQuery || masterArea || masterMesa || masterGaveta || masterCategory) && (
+                              <button
+                                onClick={() => { setMasterQuery(''); setMasterArea(''); setMasterMesa(''); setMasterGaveta(''); setMasterCategory(''); }}
+                                className="text-xs font-bold text-cyan-700 hover:text-cyan-900 flex items-center gap-1"
+                              >
+                                <RotateCcw size={13}/> Limpiar filtros
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">1. Área General</label>
+                              <select
+                                value={masterArea}
+                                onChange={(e) => { setMasterArea(e.target.value); setMasterMesa(''); setMasterGaveta(''); }}
+                                className="w-full p-3 border border-gray-200 rounded-xl text-sm font-semibold bg-white outline-none focus:border-cyan-500"
+                              >
+                                <option value="">Todas las áreas</option>
+                                {Object.keys(LAB_LOCATIONS).map(areaName => (
+                                  <option key={areaName} value={areaName}>{areaName}</option>
+                                ))}
+                                <option value="__unassigned__">⚠️ Sin ubicación estructurada</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">2. Mesa / Refri / Cuarto</label>
+                              <select
+                                value={masterMesa}
+                                onChange={(e) => { setMasterMesa(e.target.value); setMasterGaveta(''); }}
+                                disabled={!masterArea || masterArea === '__unassigned__'}
+                                className="w-full p-3 border border-gray-200 rounded-xl text-sm font-semibold bg-white outline-none focus:border-cyan-500 disabled:bg-gray-100 disabled:text-gray-400"
+                              >
+                                <option value="">Todas las mesas / equipos</option>
+                                {masterArea && LAB_LOCATIONS[masterArea] && Object.keys(LAB_LOCATIONS[masterArea]).map(mesaName => (
+                                  <option key={mesaName} value={mesaName}>{mesaName}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">3. Cajón / Gaveta / Repisa</label>
+                              <select
+                                value={masterGaveta}
+                                onChange={(e) => setMasterGaveta(e.target.value)}
+                                disabled={!masterMesa}
+                                className="w-full p-3 border border-gray-200 rounded-xl text-sm font-semibold bg-white outline-none focus:border-cyan-500 disabled:bg-gray-100 disabled:text-gray-400"
+                              >
+                                <option value="">Todos los cajones / gavetas</option>
+                                {masterArea && masterMesa && (LAB_LOCATIONS[masterArea]?.[masterMesa] || []).map(subName => (
+                                  <option key={subName} value={subName}>{subName}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">4. Categoría</label>
+                              <select
+                                value={masterCategory}
+                                onChange={(e) => setMasterCategory(e.target.value)}
+                                className="w-full p-3 border border-gray-200 rounded-xl text-sm font-semibold bg-white outline-none focus:border-cyan-500"
+                              >
+                                <option value="">Todas las categorías</option>
+                                {CATEGORIES.map(c => (
+                                  <option key={c.id} value={c.name}>{c.icon} {c.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BARRA DE CONTEO */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                        <p className="text-sm font-bold text-gray-600">
+                          Mostrando <span className="text-cyan-700 font-black">{masterFilteredItems.length}</span> de {inventory.length} artículos en el inventario
+                        </p>
+                        {masterMesa && (
+                          <span className="bg-cyan-100 text-cyan-800 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5">
+                            <MapPin size={13}/> {masterArea} &gt; {masterMesa} {masterGaveta ? `> ${masterGaveta}` : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* RESULTADOS */}
+                      {masterFilteredItems.length === 0 ? (
+                        <div className="bg-white rounded-3xl border border-dashed border-gray-300 p-16 text-center text-gray-400">
+                          <PackageSearch size={56} className="mx-auto mb-3 opacity-40"/>
+                          <p className="text-lg font-bold text-gray-500">No se encontraron elementos con esos criterios.</p>
+                          <p className="text-sm mt-1">Prueba quitando algún filtro o buscando por otra palabra clave.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                          {masterFilteredItems.map(item => {
+                            const displayImg = item.imageUrls?.[0] || item.imageUrl;
+                            const isLow = item.qty <= (item.minThreshold || 1) && item.enableLowStockAlert !== false;
+                            const catObj = CATEGORIES.find(c => c.name === item.category);
+                            return (
+                              <div key={item.id} className={`bg-white rounded-3xl border-2 ${item.manualAlert ? 'border-red-300' : 'border-gray-100 hover:border-cyan-300'} shadow-sm hover:shadow-lg transition-all overflow-hidden flex flex-col`}>
+                                {/* BANDA DE UBICACIÓN DESTACADA */}
+                                <div className={`px-5 py-3 flex items-center justify-between gap-2 border-b ${item.area ? 'bg-cyan-50/80 border-cyan-100' : 'bg-amber-50/80 border-amber-100'}`}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <MapPin size={16} className={item.area ? 'text-cyan-700 shrink-0' : 'text-amber-600 shrink-0'}/>
+                                    <div className="truncate">
+                                      {item.area ? (
+                                        <p className="text-xs font-black text-cyan-950 truncate" title={item.location}>
+                                          {item.mesa || item.area} {item.gaveta ? `› ${item.gaveta}` : ''} {item.locationDetail ? `(${item.locationDetail})` : ''}
+                                        </p>
+                                      ) : (
+                                        <p className="text-xs font-bold text-amber-900 truncate" title={item.location || 'Sin ubicación'}>
+                                          {item.location || 'Sin ubicación registrada'}
+                                        </p>
+                                      )}
+                                      {item.area && <p className="text-[10px] font-bold text-cyan-700 uppercase tracking-wider">{item.area}</p>}
+                                    </div>
+                                  </div>
+                                  {!item.area && (
+                                    <span className="text-[10px] font-black uppercase bg-amber-200 text-amber-800 px-2 py-0.5 rounded shrink-0">Texto libre</span>
+                                  )}
+                                </div>
+
+                                {/* CUERPO DE LA TARJETA */}
+                                <div className="p-5 flex gap-4 flex-1">
+                                  <div
+                                    onClick={() => setViewingItem(item)}
+                                    className="w-20 h-20 rounded-2xl bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer"
+                                  >
+                                    {displayImg ? <img src={displayImg} className="w-full h-full object-cover"/> : <ImageIcon className="text-gray-300" size={28}/>}
+                                  </div>
+
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${catObj ? catObj.color : 'bg-gray-100 text-gray-700'}`}>
+                                        {catObj?.icon} {item.category || 'Sin categoría'}
+                                      </span>
+                                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${item.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        {item.sealStatus === 'in_use' ? 'En Uso' : 'Sellado'}
+                                      </span>
+                                      {item.manualAlert && (
+                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-500 text-white flex items-center gap-1">
+                                          <Bell size={10}/> Alerta
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <h3 onClick={() => setViewingItem(item)} className="font-black text-gray-900 text-lg leading-snug cursor-pointer hover:text-cyan-700 truncate" title={item.name}>
+                                      {item.name}
+                                    </h3>
+                                    <p className="text-[11px] font-mono text-gray-400 mb-2"><QrCode size={11} className="inline mr-1"/>{item.barcode || item.id}</p>
+
+                                    {/* ESPECIFICACIONES CLAVE */}
+                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                      <p className="truncate"><span className="font-bold text-gray-400">Marca:</span> {item.brand || '--'}</p>
+                                      <p className="truncate"><span className="font-bold text-gray-400">Prov:</span> {item.provider || '--'}</p>
+                                      <p className="truncate"><span className="font-bold text-gray-400">Cat:</span> {item.catalogNum || '--'}</p>
+                                      <p className="truncate"><span className="font-bold text-gray-400">Lote:</span> {item.lotNum || '--'}</p>
+                                      {item.expirationDate && (
+                                        <p className={`col-span-2 font-bold flex items-center gap-1 ${new Date(item.expirationDate) < new Date() ? 'text-red-600' : 'text-orange-600'}`}>
+                                          <Calendar size={12}/> Caducidad: {item.expirationDate}
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    {(item.characteristics || item.observations) && (
+                                      <p className="text-xs text-gray-500 mt-2 line-clamp-2 italic">
+                                        {item.characteristics || item.observations}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* PIE DE TARJETA: STOCK Y ACCIONES */}
+                                <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2">
+                                  <div>
+                                    <p className="text-[10px] uppercase font-bold text-gray-400">Stock Actual</p>
+                                    <p className={`text-xl font-black ${isLow ? 'text-red-600' : 'text-gray-900'}`}>
+                                      {item.qty} <span className="text-xs font-semibold text-gray-500">{item.stockType === 'jar' ? '%' : item.unit}</span>
+                                    </p>
+                                  </div>
+                                  <div className="flex gap-1.5">
+                                    <button onClick={() => setConsumeItem(item)} className="px-3 py-2 bg-orange-50 text-orange-700 hover:bg-orange-100 rounded-xl text-xs font-bold flex items-center gap-1" title="Descontar Uso">
+                                      <MinusCircle size={15}/> <span className="hidden sm:inline">Descontar</span>
+                                    </button>
+                                    <button onClick={() => setViewingItem(item)} className="px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-bold flex items-center gap-1" title="Ver Ficha Completa">
+                                      <Info size={15}/> <span className="hidden sm:inline">Ficha</span>
+                                    </button>
+                                    <button onClick={() => openItemInScanner(item)} className="p-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl" title="Auditar en Escáner">
+                                      <ScanLine size={16}/>
+                                    </button>
+                                    {isAdmin && (
+                                      <button onClick={() => openItemForEdit(item)} className="p-2 bg-gray-200/70 text-gray-700 hover:bg-gray-200 rounded-xl" title="Editar Ficha / Ubicación">
+                                        <Settings size={16}/>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* --- SUB-MODO 2: ORGANIZADOR MASIVO DE UBICACIONES (SOLO ADMINS) --- */}
+                  {masterMode === 'organizer' && isAdmin && (
+                    <div className="space-y-6 animate-fade-in">
+                      {/* TARJETA 1: AUTO-DETECCIÓN INTELIGENTE */}
+                      <div className="bg-gradient-to-r from-indigo-50 to-cyan-50 border border-indigo-200 rounded-3xl p-6">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow"><Sparkles size={22}/></div>
+                            <div>
+                              <h3 className="text-lg font-black text-indigo-950">Paso 1: Auto-Detección por Texto Existente</h3>
+                              <p className="text-xs text-indigo-800 mt-0.5">
+                                Analiza automáticamente los textos que ya tenías escritos en "Ubicación" (ej. "Refri 5", "Mesa Fleming", "Cuarto de PCR") y sugiere su nueva ubicación exacta sin sobrescribir nada todavía.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleAnalyzeAutoLocations}
+                            disabled={bulkSaving}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-3 rounded-xl shadow-md shrink-0 flex items-center gap-2 text-sm"
+                          >
+                            <Sparkles size={16}/> Analizar Ubicaciones Actuales
+                          </button>
+                        </div>
+
+                        {autoMatchesPreview !== null && (
+                          <div className="mt-5 bg-white rounded-2xl border border-indigo-200 p-4 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                              <p className="text-sm font-black text-gray-800">
+                                {autoMatchesPreview.length > 0
+                                  ? `Se detectaron ${autoMatchesPreview.length} coincidencias automáticas:`
+                                  : 'No se encontraron coincidencias automáticas en los textos pendientes. Usa la asignación masiva de abajo.'}
+                              </p>
+                              <div className="flex gap-2">
+                                <button onClick={() => setAutoMatchesPreview(null)} className="px-3 py-1.5 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg">Cerrar</button>
+                                {autoMatchesPreview.length > 0 && (
+                                  <button onClick={handleApplyAutoMatches} disabled={bulkSaving} className="px-4 py-1.5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow">
+                                    {bulkSaving ? 'Aplicando...' : `Aplicar las ${autoMatchesPreview.length} Coincidencias`}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {autoMatchesPreview.length > 0 && (
+                              <div className="max-h-56 overflow-y-auto divide-y divide-gray-100 text-xs">
+                                {autoMatchesPreview.map(({ item, suggestion }) => (
+                                  <div key={item.id} className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div>
+                                      <p className="font-bold text-gray-900">{item.name}</p>
+                                      <p className="text-gray-400">Antes: "{item.location}"</p>
+                                    </div>
+                                    <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold">
+                                      → {suggestion.area} &gt; {suggestion.mesa} &gt; {suggestion.gaveta}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* TARJETA 2: PANEL DE ASIGNACIÓN MASIVA */}
+                      <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-6 space-y-5">
+                        <div>
+                          <h3 className="text-lg font-black text-gray-900">Paso 2: Asignación Masiva por Casillas</h3>
+                          <p className="text-xs text-gray-500">Marca varios productos de la lista y asígnales su ubicación física en un solo clic.</p>
+                        </div>
+
+                        {/* SELECTORES DE DESTINO */}
+                        <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">Área Destino *</label>
+                              <select
+                                value={bulkArea}
+                                onChange={(e) => { setBulkArea(e.target.value); setBulkMesa(''); setBulkGaveta(''); }}
+                                className="w-full p-2.5 border border-amber-300 rounded-xl text-sm font-semibold bg-white outline-none"
+                              >
+                                <option value="">Seleccionar Área...</option>
+                                {Object.keys(LAB_LOCATIONS).map(a => <option key={a} value={a}>{a}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">Mesa / Refri / Cuarto *</label>
+                              <select
+                                value={bulkMesa}
+                                onChange={(e) => {
+                                  const m = e.target.value;
+                                  setBulkMesa(m);
+                                  const defaultSub = (bulkArea && m && LAB_LOCATIONS[bulkArea]?.[m]?.[0]) || '';
+                                  setBulkGaveta(defaultSub);
+                                }}
+                                disabled={!bulkArea}
+                                className="w-full p-2.5 border border-amber-300 rounded-xl text-sm font-semibold bg-white outline-none disabled:bg-gray-100"
+                              >
+                                <option value="">Seleccionar Mesa / Equipo...</option>
+                                {bulkArea && LAB_LOCATIONS[bulkArea] && Object.keys(LAB_LOCATIONS[bulkArea]).map(m => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">Cajón / Gaveta / Repisa</label>
+                              <select
+                                value={bulkGaveta}
+                                onChange={(e) => setBulkGaveta(e.target.value)}
+                                disabled={!bulkMesa}
+                                className="w-full p-2.5 border border-amber-300 rounded-xl text-sm font-semibold bg-white outline-none disabled:bg-gray-100"
+                              >
+                                <option value="">Seleccionar...</option>
+                                {bulkArea && bulkMesa && (LAB_LOCATIONS[bulkArea]?.[bulkMesa] || []).map(g => <option key={g} value={g}>{g}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-amber-900 uppercase mb-1">Detalle extra (Opcional)</label>
+                              <input
+                                type="text"
+                                value={bulkDetail}
+                                onChange={(e) => setBulkDetail(e.target.value)}
+                                placeholder="Ej. Caja azul, fondo..."
+                                className="w-full p-2.5 border border-amber-300 rounded-xl text-sm bg-white outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-amber-200/70">
+                            <p className="text-xs font-bold text-amber-900">
+                              Artículos marcados: <span className="text-base font-black">{selectedBulkIds.length}</span>
+                            </p>
+                            <button
+                              onClick={handleBulkAssignLocation}
+                              disabled={bulkSaving || selectedBulkIds.length === 0 || !bulkArea || !bulkMesa}
+                              className="bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black px-6 py-2.5 rounded-xl shadow transition-colors text-sm"
+                            >
+                              {bulkSaving ? 'Guardando...' : `Asignar Ubicación a ${selectedBulkIds.length} Seleccionados`}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* FILTROS DE LA LISTA */}
+                        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
+                            <input
+                              type="text"
+                              value={orgSearchText}
+                              onChange={(e) => setOrgSearchText(e.target.value)}
+                              placeholder="Filtrar lista por nombre o texto de ubicación anterior..."
+                              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-amber-500"
+                            />
+                          </div>
+                          <select
+                            value={orgCategoryFilter}
+                            onChange={(e) => setOrgCategoryFilter(e.target.value)}
+                            className="p-2.5 border border-gray-200 rounded-xl text-sm font-semibold bg-white outline-none"
+                          >
+                            <option value="">Todas las categorías</option>
+                            {CATEGORIES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                          </select>
+                          <label className="flex items-center gap-2 text-xs font-bold text-gray-700 bg-gray-100 px-3 py-2.5 rounded-xl cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={orgFilterUnassignedOnly}
+                              onChange={(e) => setOrgFilterUnassignedOnly(e.target.checked)}
+                              className="w-4 h-4 accent-amber-600"
+                            />
+                            Solo pendientes ({unassignedLocationCount})
+                          </label>
+                        </div>
+
+                        {/* TABLA SELECCIONABLE */}
+                        <div className="border border-gray-200 rounded-2xl overflow-hidden overflow-x-auto max-h-[460px] overflow-y-auto">
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
+                              <tr>
+                                <th className="p-3 w-10 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={organizerFilteredItems.length > 0 && organizerFilteredItems.every(i => selectedBulkIds.includes(i.id))}
+                                    onChange={toggleSelectAllVisible}
+                                    className="w-4 h-4 accent-amber-600 cursor-pointer"
+                                  />
+                                </th>
+                                <th className="p-3 text-xs font-bold text-gray-500 uppercase">Producto</th>
+                                <th className="p-3 text-xs font-bold text-gray-500 uppercase">Categoría</th>
+                                <th className="p-3 text-xs font-bold text-gray-500 uppercase">Ubicación Actual / Anterior</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {organizerFilteredItems.length === 0 ? (
+                                <tr>
+                                  <td colSpan="4" className="p-10 text-center text-gray-400 font-semibold">
+                                    ¡Excelente! No hay artículos pendientes en esta vista.
+                                  </td>
+                                </tr>
+                              ) : organizerFilteredItems.map(item => (
+                                <tr
+                                  key={item.id}
+                                  onClick={() => toggleBulkSelect(item.id)}
+                                  className={`cursor-pointer transition-colors ${selectedBulkIds.includes(item.id) ? 'bg-amber-50' : 'hover:bg-slate-50'}`}
+                                >
+                                  <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedBulkIds.includes(item.id)}
+                                      onChange={() => toggleBulkSelect(item.id)}
+                                      className="w-4 h-4 accent-amber-600 cursor-pointer"
+                                    />
+                                  </td>
+                                  <td className="p-3">
+                                    <p className="font-bold text-gray-900">{item.name}</p>
+                                    <p className="text-[11px] font-mono text-gray-400">{item.barcode} · Stock: {item.qty} {item.stockType === 'jar' ? '%' : item.unit}</p>
+                                  </td>
+                                  <td className="p-3 text-xs font-medium text-gray-600">{item.category}</td>
+                                  <td className="p-3 text-xs">
+                                    {item.area ? (
+                                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold inline-block">
+                                        {item.location}
+                                      </span>
+                                    ) : (
+                                      <span className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg font-medium inline-block">
+                                        {item.location || 'Sin texto'}
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -882,7 +1851,8 @@ ${currentUserData.name}
                               <div className="p-4 flex-1 flex flex-col">
                                 <h3 className="font-bold text-gray-900 text-lg mb-1 line-clamp-2 cursor-pointer hover:text-blue-600" onClick={() => setViewingItem(item)}>{item.name}</h3>
                                 <p className="text-xs text-gray-500 font-mono mb-1"><QrCode size={12} className="inline mr-1"/>{item.barcode}</p>
-                                <p className="text-xs text-gray-500 mb-3">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
+                                <p className="text-xs text-gray-500 mb-1">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
+                                <p className="text-[11px] text-cyan-700 font-semibold mb-3 truncate flex items-center gap-1" title={item.location}><MapPin size={11} className="shrink-0"/>{item.location || '--'}</p>
                                 <div className="mt-auto pt-3 border-t border-gray-100 flex justify-between items-end">
                                   <div className="w-full">
                                     <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Stock Físico</p>
@@ -934,6 +1904,7 @@ ${currentUserData.name}
                                    </td>
                                    <td className="p-4 text-xs text-gray-600">
                                      <p className="mt-1">Lote: {item.lotNum || '--'} | Cat: {item.catalogNum || '--'}</p>
+                                     <p className="text-cyan-700 font-semibold mt-1 flex items-center gap-1 max-w-[260px] truncate" title={item.location}><MapPin size={12} className="shrink-0"/> {item.location || '--'}</p>
                                      {item.expirationDate && <p className="text-orange-600 mt-1 flex items-center gap-1 font-bold"><Calendar size={12}/> Vence: {item.expirationDate}</p>}
                                    </td>
                                    <td className="p-4 text-center">
@@ -964,142 +1935,165 @@ ${currentUserData.name}
                          </table>
                        </div>
                     )}
+                 </div>
+              )}
 
-                    {/* === MODAL DE DETALLES DEL ITEM === */}
-                    {viewingItem && (
-                      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 animate-fade-in overflow-y-auto">
-                        <div className="bg-white rounded-3xl max-w-4xl w-full p-8 relative shadow-2xl my-auto">
-                          <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors z-20"><X size={24}/></button>
-                          
-                          {viewingItem.manualAlert && (
-                            <div className="bg-red-500 text-white p-3 -mx-8 -mt-8 mb-6 rounded-t-3xl flex items-center justify-center gap-2 font-black uppercase tracking-wider text-sm shadow-md">
-                              <AlertTriangle size={18} className="animate-pulse" /> ALERTA DE STOCK / INCIDENCIA REPORTADA
+              {/* === MODAL DE DETALLES DEL ITEM (DISPONIBLE DESDE CUALQUIER PESTAÑA) === */}
+              {viewingItem && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 animate-fade-in overflow-y-auto">
+                  <div className="bg-white rounded-3xl max-w-4xl w-full p-8 relative shadow-2xl my-auto">
+                    <button onClick={() => setViewingItem(null)} className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors z-20"><X size={24}/></button>
+                    
+                    {viewingItem.manualAlert && (
+                      <div className="bg-red-500 text-white p-3 -mx-8 -mt-8 mb-6 rounded-t-3xl flex items-center justify-center gap-2 font-black uppercase tracking-wider text-sm shadow-md">
+                        <AlertTriangle size={18} className="animate-pulse" /> ALERTA DE STOCK / INCIDENCIA REPORTADA
+                      </div>
+                    )}
+                    
+                    <div className="flex flex-col md:flex-row gap-8 mb-6">
+                      
+                      <div className="w-full md:w-1/3 flex flex-col gap-3">
+                         <div className="w-full aspect-square bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
+                           {(viewingItem.imageUrls && viewingItem.imageUrls.length > 0) || viewingItem.imageUrl ? (
+                             <img src={viewingItem.imageUrls ? viewingItem.imageUrls[0] : viewingItem.imageUrl} className="w-full h-full object-cover"/> 
+                           ) : <ImageIcon size={64} className="text-gray-300"/>}
+                         </div>
+                         {viewingItem.imageUrls && viewingItem.imageUrls.length > 1 && (
+                            <div className="grid grid-cols-3 gap-2">
+                               {viewingItem.imageUrls.slice(1).map((imgUrl, i) => (
+                                 <div key={i} className="aspect-square bg-gray-100 rounded-lg overflow-hidden border">
+                                    <img src={imgUrl} className="w-full h-full object-cover opacity-80 hover:opacity-100 cursor-zoom-in" onClick={() => window.open(imgUrl, '_blank')}/>
+                                 </div>
+                               ))}
                             </div>
-                          )}
-                          
-                          <div className="flex flex-col md:flex-row gap-8 mb-6">
-                            
-                            <div className="w-full md:w-1/3 flex flex-col gap-3">
-                               <div className="w-full aspect-square bg-gray-100 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-200 shrink-0">
-                                 {(viewingItem.imageUrls && viewingItem.imageUrls.length > 0) || viewingItem.imageUrl ? (
-                                   <img src={viewingItem.imageUrls ? viewingItem.imageUrls[0] : viewingItem.imageUrl} className="w-full h-full object-cover"/> 
-                                 ) : <ImageIcon size={64} className="text-gray-300"/>}
-                               </div>
-                               {viewingItem.imageUrls && viewingItem.imageUrls.length > 1 && (
-                                  <div className="grid grid-cols-3 gap-2">
-                                     {viewingItem.imageUrls.slice(1).map((imgUrl, i) => (
-                                       <div key={i} className="aspect-square bg-gray-100 rounded-lg overflow-hidden border">
-                                          <img src={imgUrl} className="w-full h-full object-cover opacity-80 hover:opacity-100 cursor-zoom-in" onClick={() => window.open(imgUrl, '_blank')}/>
-                                       </div>
-                                     ))}
-                                  </div>
-                               )}
-                            </div>
+                         )}
+                      </div>
 
-                            <div className="flex-1">
-                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                                <div>
-                                  <h2 className="text-3xl font-black text-gray-900 mb-2">{viewingItem.name}</h2>
-                                  <p className="text-sm text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg inline-block border"><QrCode size={14} className="inline mr-2"/>{viewingItem.barcode}</p>
-                                </div>
+                      <div className="flex-1">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                          <div>
+                            <h2 className="text-3xl font-black text-gray-900 mb-2">{viewingItem.name}</h2>
+                            <p className="text-sm text-gray-500 font-mono bg-gray-100 px-3 py-1 rounded-lg inline-block border"><QrCode size={14} className="inline mr-2"/>{viewingItem.barcode}</p>
+                          </div>
 
-                                {isAdmin && (
-                                  <div className="flex flex-col gap-2 shrink-0">
-                                    <button 
-                                      onClick={() => setConsumeItem(viewingItem)}
-                                      className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"
-                                    >
-                                      <MinusCircle size={16}/> Descontar
-                                    </button>
+                          {isAdmin && (
+                            <div className="flex flex-col gap-2 shrink-0">
+                              <button 
+                                onClick={() => setConsumeItem(viewingItem)}
+                                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"
+                              >
+                                <MinusCircle size={16}/> Descontar
+                              </button>
 
-                                    <button 
-                                      onClick={() => toggleSealStatus(viewingItem.id, viewingItem.sealStatus)}
-                                      className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200'}`}
-                                    >
-                                      {viewingItem.sealStatus === 'in_use' ? <PackageOpen size={16}/> : <Package size={16}/>}
-                                      {viewingItem.sealStatus === 'in_use' ? 'Marcar Sellado' : 'Marcar en Uso'}
-                                    </button>
-                                    
-                                    <button 
-                                      onClick={() => toggleManualAlert(viewingItem.id, viewingItem.manualAlert)}
-                                      className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.manualAlert ? 'bg-red-600 text-white hover:bg-red-700 border-red-700 shadow-md' : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}
-                                    >
-                                      <Bell size={16} className={viewingItem.manualAlert ? 'animate-pulse' : ''}/>
-                                      {viewingItem.manualAlert ? 'Desactivar Alerta' : 'Activar Alerta'}
-                                    </button>
-
-                                    {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
-                                      <button 
-                                        onClick={() => { handleDeleteItem(viewingItem.id, viewingItem.name); setViewingItem(null); }}
-                                        className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center gap-2 transition-all mt-2"
-                                      >
-                                        <Trash2 size={16}/> Eliminar Elemento
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                              <button 
+                                onClick={() => toggleSealStatus(viewingItem.id, viewingItem.sealStatus)}
+                                className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.sealStatus === 'in_use' ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200'}`}
+                              >
+                                {viewingItem.sealStatus === 'in_use' ? <PackageOpen size={16}/> : <Package size={16}/>}
+                                {viewingItem.sealStatus === 'in_use' ? 'Marcar Sellado' : 'Marcar en Uso'}
+                              </button>
                               
-                              <div className="mt-6 grid grid-cols-2 gap-4">
-                                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-                                  <p className="text-xs uppercase font-bold text-blue-500 mb-1">Stock Físico Actual</p>
-                                  <p className="text-3xl font-black text-blue-900">{viewingItem.qty} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
-                                </div>
-                                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <p className="text-xs uppercase font-bold text-gray-500">Stock Mínimo Sugerido</p>
-                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${viewingItem.enableLowStockAlert !== false ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-gray-400'}`}>{viewingItem.enableLowStockAlert !== false ? 'Alerta Activa' : 'Alerta Apagada'}</span>
-                                  </div>
-                                  <p className="text-3xl font-black text-gray-700">{viewingItem.minThreshold || 1} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                              <button 
+                                onClick={() => toggleManualAlert(viewingItem.id, viewingItem.manualAlert)}
+                                className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border flex items-center justify-center gap-2 transition-all ${viewingItem.manualAlert ? 'bg-red-600 text-white hover:bg-red-700 border-red-700 shadow-md' : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}
+                              >
+                                <Bell size={16} className={viewingItem.manualAlert ? 'animate-pulse' : ''}/>
+                                {viewingItem.manualAlert ? 'Desactivar Alerta' : 'Activar Alerta'}
+                              </button>
 
-                          {viewingItem.characteristics && (
-                            <div className="mb-6">
-                               <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Info size={16}/> Características del Elemento</p>
-                               <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 text-indigo-900 font-medium text-sm leading-relaxed">
-                                 {viewingItem.characteristics}
-                               </div>
-                            </div>
-                          )}
+                              <button
+                                onClick={() => openItemForEdit(viewingItem)}
+                                className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center justify-center gap-2 transition-all"
+                              >
+                                <Settings size={16}/> Editar Ficha
+                              </button>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-6">
-                            <div>
-                               <p className="text-xs font-bold text-gray-400 uppercase">Categoría</p>
-                               <div className="flex items-center gap-2">
-                                  <p className="font-medium text-gray-900">{viewingItem.category}</p>
-                                  {isAdmin && <button onClick={() => setReassignItem(viewingItem)} className="p-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 rounded-md transition-colors" title="Reubicar Elemento"><ArrowRightLeft size={14}/></button>}
-                               </div>
-                            </div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Ubicación</p><p className="font-medium text-gray-900">{viewingItem.location}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Proveedor</p><p className="font-medium text-gray-900">{viewingItem.provider || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Marca</p><p className="font-medium text-gray-900">{viewingItem.brand || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Catálogo</p><p className="font-medium text-gray-900">{viewingItem.catalogNum || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Lote</p><p className="font-medium text-gray-900">{viewingItem.lotNum || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Caducidad</p><p className={`font-medium ${viewingItem.expirationDate && new Date(viewingItem.expirationDate) < new Date() ? 'text-red-600 font-bold' : 'text-gray-900'}`}>{viewingItem.expirationDate || '--'}</p></div>
-                            <div><p className="text-xs font-bold text-gray-400 uppercase">Estado Pedido</p><p className="font-medium text-gray-900 uppercase">{viewingItem.orderStatus === 'ordered' ? '📦 En Camino' : (viewingItem.orderStatus === 'received' ? '✅ Recibido' : 'Normal')}</p></div>
-                          </div>
-
-                          {viewingItem.observations && (
-                            <div className="mt-6 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-                              <p className="text-xs font-bold text-yellow-700 uppercase mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones / Seguridad</p>
-                              <p className="text-sm text-yellow-900">{viewingItem.observations}</p>
-                            </div>
-                          )}
-
-                          {viewingItem.purchaseLink && (
-                            <div className="mt-6 pt-6 border-t border-gray-100 text-center">
-                              <a href={viewingItem.purchaseLink} target="_blank" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors">
-                                <ExternalLink size={18}/> Ver Enlace de Compra
-                              </a>
+                              {SUPER_ADMIN_EMAILS.includes(currentUserData.email) && (
+                                <button 
+                                  onClick={() => { handleDeleteItem(viewingItem.id, viewingItem.name); setViewingItem(null); }}
+                                  className="px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center gap-2 transition-all mt-1"
+                                >
+                                  <Trash2 size={16}/> Eliminar Elemento
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
+                        
+                        <div className="mt-6 grid grid-cols-2 gap-4">
+                          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                            <p className="text-xs uppercase font-bold text-blue-500 mb-1">Stock Físico Actual</p>
+                            <p className="text-3xl font-black text-blue-900">{viewingItem.qty} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-xs uppercase font-bold text-gray-500">Stock Mínimo Sugerido</p>
+                              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${viewingItem.enableLowStockAlert !== false ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-gray-400'}`}>{viewingItem.enableLowStockAlert !== false ? 'Alerta Activa' : 'Alerta Apagada'}</span>
+                            </div>
+                            <p className="text-3xl font-black text-gray-700">{viewingItem.minThreshold || 1} <span className="text-base font-medium">{viewingItem.stockType === 'jar' ? '%' : viewingItem.unit}</span></p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* RUTA DE UBICACIÓN FÍSICA DESTACADA */}
+                    <div className="mb-6 bg-cyan-50 border border-cyan-200 rounded-2xl p-4 flex items-start gap-3">
+                      <div className="p-2.5 bg-cyan-600 text-white rounded-xl shrink-0"><MapPin size={20}/></div>
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-cyan-700">Ubicación Física en Laboratorio</p>
+                        <p className="text-base font-black text-cyan-950 mt-0.5">{viewingItem.location || 'Sin ubicación asignada'}</p>
+                        {viewingItem.area && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <span className="text-[11px] bg-white border border-cyan-200 text-cyan-900 font-bold px-2.5 py-0.5 rounded-lg">Área: {viewingItem.area}</span>
+                            {viewingItem.mesa && <span className="text-[11px] bg-white border border-cyan-200 text-cyan-900 font-bold px-2.5 py-0.5 rounded-lg">Mesa/Equipo: {viewingItem.mesa}</span>}
+                            {viewingItem.gaveta && <span className="text-[11px] bg-white border border-cyan-200 text-cyan-900 font-bold px-2.5 py-0.5 rounded-lg">Sub-ubicación: {viewingItem.gaveta}</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {viewingItem.characteristics && (
+                      <div className="mb-6">
+                         <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Info size={16}/> Características del Elemento</p>
+                         <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 text-indigo-900 font-medium text-sm leading-relaxed">
+                           {viewingItem.characteristics}
+                         </div>
                       </div>
                     )}
-                 </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 border-t border-gray-100 pt-6">
+                      <div>
+                         <p className="text-xs font-bold text-gray-400 uppercase">Categoría</p>
+                         <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900">{viewingItem.category}</p>
+                            {isAdmin && <button onClick={() => setReassignItem(viewingItem)} className="p-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 rounded-md transition-colors" title="Reubicar Elemento"><ArrowRightLeft size={14}/></button>}
+                         </div>
+                      </div>
+                      <div><p className="text-xs font-bold text-gray-400 uppercase">Ubicación</p><p className="font-medium text-gray-900">{viewingItem.location}</p></div>
+                      <div><p className="text-xs font-bold text-gray-400 uppercase">Proveedor</p><p className="font-medium text-gray-900">{viewingItem.provider || '--'}</p></div>
+                      <div><p className="text-xs font-bold text-gray-400 uppercase">Marca</p><p className="font-medium text-gray-900">{viewingItem.brand || '--'}</p></div>
+                      <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Catálogo</p><p className="font-medium text-gray-900">{viewingItem.catalogNum || '--'}</p></div>
+                      <div><p className="text-xs font-bold text-gray-400 uppercase">Nº Lote</p><p className="font-medium text-gray-900">{viewingItem.lotNum || '--'}</p></div>
+                      <div><p className="text-xs font-bold text-gray-400 uppercase">Caducidad</p><p className={`font-medium ${viewingItem.expirationDate && new Date(viewingItem.expirationDate) < new Date() ? 'text-red-600 font-bold' : 'text-gray-900'}`}>{viewingItem.expirationDate || '--'}</p></div>
+                      <div><p className="text-xs font-bold text-gray-400 uppercase">Estado Pedido</p><p className="font-medium text-gray-900 uppercase">{viewingItem.orderStatus === 'ordered' ? '📦 En Camino' : (viewingItem.orderStatus === 'received' ? '✅ Recibido' : 'Normal')}</p></div>
+                    </div>
+
+                    {viewingItem.observations && (
+                      <div className="mt-6 bg-yellow-50 p-4 rounded-xl border border-yellow-200">
+                        <p className="text-xs font-bold text-yellow-700 uppercase mb-1 flex items-center gap-1"><AlertTriangle size={14}/> Observaciones / Seguridad</p>
+                        <p className="text-sm text-yellow-900">{viewingItem.observations}</p>
+                      </div>
+                    )}
+
+                    {viewingItem.purchaseLink && (
+                      <div className="mt-6 pt-6 border-t border-gray-100 text-center">
+                        <a href={viewingItem.purchaseLink} target="_blank" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors">
+                          <ExternalLink size={18}/> Ver Enlace de Compra
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
 
               {/* === MODAL DE REASIGNACIÓN DE CATEGORÍA === */}
@@ -1203,18 +2197,104 @@ ${currentUserData.name}
                       )}
                     </div>
 
-                    <div className="space-y-6 mt-4">
+                    {/* SELECTOR DE UBICACIÓN FÍSICA ESTRUCTURADA EN CASCADA */}
+                    <div className="col-span-1 md:col-span-2 bg-cyan-50/70 p-6 rounded-2xl border border-cyan-200 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h3 className="text-sm font-black text-cyan-900 uppercase tracking-wider flex items-center gap-2">
+                          <MapPin size={18} className="text-cyan-600"/> Ubicación Física en el Laboratorio *
+                        </h3>
+                        {editingItem && !editingItem.area && formLegacyLocation && (
+                          <span className="text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1 rounded-lg">
+                            Texto anterior: "{formLegacyLocation}"
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-bold text-cyan-800 uppercase mb-1.5">1. Área General *</label>
+                          <select
+                            value={formArea}
+                            onChange={(e) => { setFormArea(e.target.value); setFormMesa(''); setFormGaveta(''); }}
+                            className="w-full p-3 border border-cyan-300 rounded-xl font-semibold bg-white outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                          >
+                            <option value="">Seleccionar Área...</option>
+                            {Object.keys(LAB_LOCATIONS).map(areaName => (
+                              <option key={areaName} value={areaName}>{areaName}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-cyan-800 uppercase mb-1.5">2. Mesa / Refri / Cuarto *</label>
+                          <select
+                            value={formMesa}
+                            onChange={(e) => {
+                              const selectedM = e.target.value;
+                              setFormMesa(selectedM);
+                              const firstSub = (formArea && selectedM && LAB_LOCATIONS[formArea]?.[selectedM]?.[0]) || '';
+                              setFormGaveta(firstSub);
+                            }}
+                            disabled={!formArea}
+                            className="w-full p-3 border border-cyan-300 rounded-xl font-semibold bg-white outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                          >
+                            <option value="">Seleccionar Mesa / Equipo...</option>
+                            {formArea && LAB_LOCATIONS[formArea] && Object.keys(LAB_LOCATIONS[formArea]).map(mesaName => (
+                              <option key={mesaName} value={mesaName}>{mesaName}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-cyan-800 uppercase mb-1.5">3. Cajón / Gaveta / Repisa</label>
+                          <select
+                            value={formGaveta}
+                            onChange={(e) => setFormGaveta(e.target.value)}
+                            disabled={!formMesa}
+                            className="w-full p-3 border border-cyan-300 rounded-xl font-semibold bg-white outline-none focus:ring-2 focus:ring-cyan-500 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                          >
+                            <option value="">Seleccionar Sub-ubicación...</option>
+                            {formArea && formMesa && (LAB_LOCATIONS[formArea]?.[formMesa] || []).map(subName => (
+                              <option key={subName} value={subName}>{subName}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-bold text-cyan-800 uppercase mb-1.5">Detalle Extra (Opcional)</label>
+                          <input
+                            type="text"
+                            value={formLocationDetail}
+                            onChange={(e) => setFormLocationDetail(e.target.value)}
+                            placeholder="Ej. Caja azul, fondo a la derecha, estante 2..."
+                            className="w-full p-3 border border-cyan-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                          />
+                        </div>
+                        <div className="flex flex-col justify-end">
+                          <p className="text-[10px] font-bold text-cyan-700 uppercase mb-1">Vista previa de ruta guardada:</p>
+                          <div className="p-3 bg-white border border-cyan-200 rounded-xl text-xs font-bold text-cyan-950 truncate">
+                            {formArea
+                              ? buildLocationString(formArea, formMesa, formGaveta, formLocationDetail)
+                              : (formLegacyLocation || 'Selecciona un Área arriba para estructurar la ubicación')}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6 mt-2">
                       <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Categoría *</label>
                         <select name="category" defaultValue={editingItem?.category || selectedFolder} className="w-full p-3.5 border border-gray-300 rounded-xl font-medium outline-none">{CATEGORIES.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Ubicación Física *</label>
-                        <input name="location" defaultValue={editingItem?.location} required placeholder="Ej. Estante A, Refri -20°C" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
+                        <label className="block text-xs font-bold text-orange-600 uppercase mb-2 flex items-center gap-1"><Calendar size={14}/> Fecha de Caducidad</label>
+                        <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3.5 border border-orange-300 bg-orange-50/30 rounded-xl outline-none" />
                       </div>
                     </div>
 
-                    <div className="space-y-6 mt-4">
+                    <div className="space-y-6 mt-2">
                       <div className="grid grid-cols-2 gap-4">
                          <div>
                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Proveedor</label>
@@ -1234,10 +2314,6 @@ ${currentUserData.name}
                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Nº de Lote</label>
                            <input name="lotNum" defaultValue={editingItem?.lotNum} placeholder="Ej. LOT 987X" className="w-full p-3.5 border border-gray-300 rounded-xl outline-none" />
                          </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-orange-600 uppercase mb-2 flex items-center gap-1"><Calendar size={14}/> Fecha de Caducidad</label>
-                        <input type="date" name="expirationDate" defaultValue={editingItem?.expirationDate} className="w-full p-3.5 border border-orange-300 bg-orange-50/30 rounded-xl outline-none" />
                       </div>
                     </div>
 
@@ -1371,7 +2447,7 @@ ${currentUserData.name}
                             <ScanLine className="absolute left-4 top-1/2 transform -translate-y-1/2 text-blue-600" size={24} />
                             <input ref={scannerInputRef} type="text" value={scanInput} onChange={(e)=>setScanInput(e.target.value)} placeholder="Dispara el lector aquí..." className="w-full pl-14 pr-4 py-5 bg-white border-2 border-blue-300 rounded-xl focus:border-blue-600 outline-none font-mono text-base shadow-sm" autoFocus />
                           </div>
-                          <button type="submit" className="hidden"></button>
+                          <button ref={hiddenSubmitBtnRef} type="submit" className="hidden"></button>
                         </form>
 
                       </div>
@@ -1407,7 +2483,7 @@ ${currentUserData.name}
                               <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Marca</p><p className="font-medium text-gray-900">{scannedItem.brand || '--'}</p></div>
                               <div><p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Proveedor</p><p className="font-medium text-gray-900">{scannedItem.provider || '--'}</p></div>
                               
-                              <div className="col-span-2 border-t border-gray-200 pt-3 flex justify-between items-center">
+                              <div className="col-span-2 border-t border-gray-200 pt-3 flex justify-between items-center gap-4">
                                 <div>
                                   <p className="text-xs text-gray-500 uppercase font-bold tracking-wider flex items-center gap-1"><Calendar size={12}/> Vencimiento</p>
                                   <p className={`font-bold mt-1 ${!scannedItem.expirationDate ? 'text-gray-600' : new Date(scannedItem.expirationDate) < new Date() ? 'text-red-600 text-base' : 'text-gray-900'}`}>
